@@ -184,7 +184,7 @@ function render(){
   // ✅ Overlay korrekt an/aus
   if(game.status !== "playing" && game.status !== "waiting"){
     showOverlay(`
-      <h1>${game.status === "win" ? "🎉 GEWONNEN" : "💀 VERLOREN"}</h1>
+      <h1>${game.status === "win" ? "🎉 You won!" : "💀 You lost!"}</h1>
       <button onclick="rematch()">Rematch</button>
     `);
   } else {
