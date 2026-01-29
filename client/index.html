@@ -109,7 +109,10 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   min-width:56px;
   user-select:none;
   cursor:pointer;
+  position:relative;
+  transition: transform .12s ease;
 }
+.card:active{ transform: scale(0.98); }
 .card.selected{
   outline:2px solid var(--accent);
   box-shadow:0 0 10px rgba(76,175,80,.7);
@@ -149,6 +152,22 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   padding:16px;
 }
 #overlay h2{ margin:6px 0 10px; }
+
+/* ✅ Flying card (Animation) */
+.flyingCard{
+  position:fixed;
+  z-index:10000;
+  pointer-events:none;
+  background:var(--card);
+  color:var(--text);
+  padding:14px 18px;
+  border-radius:16px;
+  font-size:18px;
+  min-width:56px;
+  box-shadow:0 10px 28px rgba(0,0,0,.55);
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
 
 @media (max-width:420px){
   input{ min-width:150px; }
@@ -198,7 +217,9 @@ const socket = io(SERVER_URL);
 
 let room="", myId="", state=null, myHand=[], selectedCard=null;
 let audioCtx=null;
-let armedPing = null; // "have" | "dont" (mobile fallback)
+let armedPing = null; // "have" | "dont"
+const pileEls = {};   // pileName -> DOM element
+const cardEls = new Map(); // cardValue -> DOM element (last rendered)
 
 function beep(freq=440, ms=70){
   try{
@@ -316,6 +337,45 @@ function sendPilePing(pile, type){
   beep(type==="dont" ? 240 : 860, 70);
 }
 
+/* ✅ Card animation */
+function animateCardToPile(cardValue, pileName){
+  const fromEl = cardEls.get(cardValue);
+  const toEl = pileEls[pileName];
+  if(!fromEl || !toEl) return;
+
+  const fr = fromEl.getBoundingClientRect();
+  const tr = toEl.getBoundingClientRect();
+
+  const startX = fr.left + fr.width/2;
+  const startY = fr.top + fr.height/2;
+  const endX   = tr.left + tr.width/2;
+  const endY   = tr.top + tr.height/2;
+
+  const fly = document.createElement("div");
+  fly.className = "flyingCard";
+  fly.textContent = cardValue;
+  fly.style.left = startX + "px";
+  fly.style.top  = startY + "px";
+  document.body.appendChild(fly);
+
+  // Richtung: up -> leicht nach oben bogen, down -> leicht nach unten bogen
+  const dir = pileName.startsWith("up") ? -1 : 1;
+  const midX = (startX + endX) / 2;
+  const midY = (startY + endY) / 2 + dir * 80;
+
+  // Web Animations API (läuft gut auf iOS/Safari)
+  const anim = fly.animate([
+    { transform: `translate(-50%, -50%) scale(1)`, opacity: 1, offset: 0, left: startX+"px", top: startY+"px" },
+    { transform: `translate(-50%, -50%) scale(1.06)`, opacity: 1, offset: 0.55, left: midX+"px", top: midY+"px" },
+    { transform: `translate(-50%, -50%) scale(0.96)`, opacity: 0.92, offset: 1, left: endX+"px", top: endY+"px" }
+  ], {
+    duration: 420,
+    easing: "cubic-bezier(.2,.9,.2,1)"
+  });
+
+  anim.onfinish = () => fly.remove();
+}
+
 function render(){
   if(!state) return;
 
@@ -338,7 +398,6 @@ function render(){
     document.getElementById("turnInfo").innerText="";
   }
 
-  // EndTurn Button: (>=minPlays) oder PASS wenn keine legalen Züge
   const endBtn=document.getElementById("endTurnBtn");
   const canPass = isMyTurn && !hasAnyLegalMove();
   endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
@@ -374,10 +433,10 @@ function render(){
     d.className="pile";
     d.innerHTML=`<span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span><strong>${val}</strong>`;
 
-    // legal highlight for selected card
+    pileEls[p] = d; // store for animation target
+
     if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
 
-    // show pile ping
     const ping = state.pilePings?.[p];
     if(ping){
       const badge=document.createElement("div");
@@ -386,7 +445,7 @@ function render(){
       d.appendChild(badge);
     }
 
-    // Drag target (desktop)
+    // Drag target for ping (desktop)
     d.addEventListener("dragover", (e)=> e.preventDefault());
     d.addEventListener("drop", (e)=>{
       e.preventDefault();
@@ -414,10 +473,15 @@ function render(){
 function renderHand(){
   const handDiv=document.getElementById("hand");
   handDiv.innerHTML="";
+  cardEls.clear();
+
   (myHand||[]).forEach((c)=>{
     const el=document.createElement("div");
     el.className="card" + (selectedCard===c ? " selected" : "");
     el.innerText=c;
+
+    cardEls.set(c, el);
+
     el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
     handDiv.appendChild(el);
   });
@@ -430,6 +494,9 @@ function tryPlay(pile){
 
   const ok=isValid(selectedCard, pile, state.piles[pile]);
   if(!ok) return toast("Dort nicht erlaubt.");
+
+  // ✅ Animation before emitting (optimistic UI feel)
+  animateCardToPile(selectedCard, pile);
 
   socket.emit("play", { room, card:selectedCard, pile });
   beep(740,55);
