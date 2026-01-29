@@ -44,7 +44,6 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   color:var(--muted);
 }
 
-/* ✅ Turn Ring wrapper */
 #turnInfoWrap{
   display:flex;
   align-items:center;
@@ -52,7 +51,6 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   justify-content:center;
 }
 
-/* ✅ Turn-Ring (ruhig rotierend, kein Countdown) */
 .turnRing{
   width:18px;
   height:18px;
@@ -170,7 +168,7 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   padding:18px;
 }
 #overlay .box{
-  width:min(520px, 92vw);
+  width:min(560px, 94vw);
   background:var(--panel);
   border:2px solid #555;
   border-radius:18px;
@@ -178,7 +176,28 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
 }
 #overlay h2{ margin:6px 0 10px; }
 
-/* ✅ Flying card (Animation) */
+.choiceRow{
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+.choiceBtn{
+  min-width:200px;
+}
+.choiceBtn.secondary{
+  background:#2b2b2b;
+  color:var(--text);
+}
+
+.choiceStatus{
+  margin-top:10px;
+  color:var(--muted);
+  font-size:14px;
+}
+
+/* Flying card */
 .flyingCard{
   position:fixed;
   z-index:10000;
@@ -247,13 +266,12 @@ const socket = io(SERVER_URL);
 
 let room="", myId="", state=null, myHand=[], selectedCard=null;
 let audioCtx=null;
-let armedPing = null;
+let armedPing=null;
 const pileEls = {};
 const cardEls = new Map();
 
-/* ✅ Persist Lobby + Name (Reload-friendly) */
-const LS_ROOM = "thegame_room";
-const LS_NAME = "thegame_name";
+/* Persist Lobby + Name */
+const LS_ROOM="thegame_room", LS_NAME="thegame_name";
 function saveInputs(){
   try{
     localStorage.setItem(LS_ROOM, document.getElementById("room").value.trim());
@@ -262,13 +280,13 @@ function saveInputs(){
 }
 function loadInputs(){
   try{
-    const r = localStorage.getItem(LS_ROOM) || "";
-    const n = localStorage.getItem(LS_NAME) || "";
-    if(r) document.getElementById("room").value = r;
-    if(n) document.getElementById("name").value = n;
+    const r=localStorage.getItem(LS_ROOM)||"";
+    const n=localStorage.getItem(LS_NAME)||"";
+    if(r) document.getElementById("room").value=r;
+    if(n) document.getElementById("name").value=n;
   }catch{}
 }
-window.addEventListener("load", () => {
+window.addEventListener("load", ()=>{
   loadInputs();
   document.getElementById("room").addEventListener("input", saveInputs);
   document.getElementById("name").addEventListener("input", saveInputs);
@@ -277,8 +295,8 @@ window.addEventListener("load", () => {
 function beep(freq=440, ms=70){
   try{
     if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
+    const o=audioCtx.createOscillator();
+    const g=audioCtx.createGain();
     o.type="sine"; o.frequency.value=freq;
     g.gain.value=0.06;
     o.connect(g); g.connect(audioCtx.destination);
@@ -300,7 +318,7 @@ function create(){
   saveInputs();
   room=document.getElementById("room").value.trim();
   if(!room) return alert("Bitte Lobby-Code eingeben");
-  const maxPlayers=Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value || "2")));
+  const maxPlayers=Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value||"2")));
   socket.emit("create", { room, maxPlayers });
   join();
 }
@@ -321,7 +339,6 @@ socket.on("state", (s)=>{
   myId=socket.id;
   render();
 });
-
 socket.on("hand", (hand)=>{
   myHand=hand||[];
   renderHand();
@@ -344,7 +361,7 @@ function hasAnyLegalMove(){
 }
 
 function minPlaysThisTurn(){
-  return (state && state.deckCount === 0) ? 1 : 2;
+  return (state && state.deckCount===0) ? 1 : 2;
 }
 
 function showOverlay(html){
@@ -361,70 +378,66 @@ function hideOverlay(){
 let lastEndSound=null;
 let lastPassHint=false;
 
-/* Ping chips: Drag (Desktop) + Tap-to-arm (Mobile) */
+/* Ping chips */
 function setArmedPing(typeOrNull){
-  armedPing = typeOrNull;
+  armedPing=typeOrNull;
   document.getElementById("chipHave").classList.toggle("armed", armedPing==="have");
   document.getElementById("chipDont").classList.toggle("armed", armedPing==="dont");
 }
-
 ["chipHave","chipDont"].forEach(id=>{
-  const el = document.getElementById(id);
-
-  el.addEventListener("dragstart", (e)=>{
+  const el=document.getElementById(id);
+  el.addEventListener("dragstart",(e)=>{
     e.dataTransfer.setData("pingType", el.dataset.type);
-    try { e.dataTransfer.effectAllowed = "copy"; } catch {}
+    try{ e.dataTransfer.effectAllowed="copy"; }catch{}
   });
-
   el.addEventListener("click", ()=>{
-    const t = el.dataset.type;
-    setArmedPing(armedPing===t ? null : t);
+    const t=el.dataset.type;
+    setArmedPing(armedPing===t?null:t);
     toast(armedPing ? "Ping abgewählt" : (t==="have" ? "👀 Ping gewählt – tippe einen Stapel" : "🚫 Ping gewählt – tippe einen Stapel"));
     beep(880,55);
   });
 });
-
 function sendPilePing(pile, type){
   if(!room) return toast("Erst Lobby beitreten.");
   socket.emit("pilePing", { room, pile, type });
   beep(type==="dont" ? 240 : 860, 70);
 }
 
+/* Startpref senden */
+function sendStartPref(pref){
+  socket.emit("startPref", { room, pref });
+  beep(600,70);
+}
+
 /* Card animation */
 function animateCardToPile(cardValue, pileName){
-  const fromEl = cardEls.get(cardValue);
-  const toEl = pileEls[pileName];
+  const fromEl=cardEls.get(cardValue);
+  const toEl=pileEls[pileName];
   if(!fromEl || !toEl) return;
 
-  const fr = fromEl.getBoundingClientRect();
-  const tr = toEl.getBoundingClientRect();
+  const fr=fromEl.getBoundingClientRect();
+  const tr=toEl.getBoundingClientRect();
+  const startX=fr.left+fr.width/2, startY=fr.top+fr.height/2;
+  const endX=tr.left+tr.width/2, endY=tr.top+tr.height/2;
 
-  const startX = fr.left + fr.width/2;
-  const startY = fr.top + fr.height/2;
-  const endX   = tr.left + tr.width/2;
-  const endY   = tr.top + tr.height/2;
-
-  const fly = document.createElement("div");
-  fly.className = "flyingCard";
-  fly.textContent = cardValue;
-  fly.style.left = startX + "px";
-  fly.style.top  = startY + "px";
+  const fly=document.createElement("div");
+  fly.className="flyingCard";
+  fly.textContent=cardValue;
+  fly.style.left=startX+"px";
+  fly.style.top=startY+"px";
   document.body.appendChild(fly);
 
-  const dir = pileName.startsWith("up") ? -1 : 1;
-  const midX = (startX + endX) / 2;
-  const midY = (startY + endY) / 2 + dir * 80;
+  const dir=pileName.startsWith("up") ? -1 : 1;
+  const midX=(startX+endX)/2;
+  const midY=(startY+endY)/2 + dir*80;
 
-  const anim = fly.animate([
-    { transform: `translate(-50%, -50%) scale(1)`, opacity: 1, offset: 0, left: startX+"px", top: startY+"px" },
-    { transform: `translate(-50%, -50%) scale(1.06)`, opacity: 1, offset: 0.55, left: midX+"px", top: midY+"px" },
-    { transform: `translate(-50%, -50%) scale(0.96)`, opacity: 0.92, offset: 1, left: endX+"px", top: endY+"px" }
-  ], {
-    duration: 420,
-    easing: "cubic-bezier(.2,.9,.2,1)"
-  });
+  const anim=fly.animate([
+    { transform:`translate(-50%, -50%) scale(1)`, opacity:1, offset:0, left:startX+"px", top:startY+"px" },
+    { transform:`translate(-50%, -50%) scale(1.06)`, opacity:1, offset:0.55, left:midX+"px", top:midY+"px" },
+    { transform:`translate(-50%, -50%) scale(0.96)`, opacity:0.92, offset:1, left:endX+"px", top:endY+"px" }
+  ], { duration:420, easing:"cubic-bezier(.2,.9,.2,1)" });
 
-  anim.onfinish = () => fly.remove();
+  anim.onfinish=()=>fly.remove();
 }
 
 function render(){
@@ -439,9 +452,12 @@ function render(){
   const played = state.playedThisTurn?.[myId] ?? 0;
   const minPlays = minPlaysThisTurn();
 
-  const ring = document.getElementById("turnRing");
+  const ring=document.getElementById("turnRing");
   if(state.status==="waiting"){
     document.getElementById("turnInfo").innerText=`Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
+    ring.classList.remove("spinning");
+  } else if(state.status==="choosing_start"){
+    document.getElementById("turnInfo").innerText=`Start wählen…`;
     ring.classList.remove("spinning");
   } else if(state.status==="playing"){
     document.getElementById("turnInfo").innerText = isMyTurn
@@ -453,7 +469,7 @@ function render(){
     ring.classList.remove("spinning");
   }
 
-  // EndTurn Button: (>=minPlays) oder PASS wenn keine legalen Züge
+  // EndTurn Button
   const endBtn=document.getElementById("endTurnBtn");
   const canPass = isMyTurn && !hasAnyLegalMove();
   endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
@@ -464,20 +480,39 @@ function render(){
   }
   if(!isMyTurn) lastPassHint=false;
 
-  if(state.status==="win" || state.status==="lose"){
+  // Startwahl Overlay
+  if(state.status==="choosing_start"){
+    const myMade = !!state.start?.made?.[myId];
+    const madeCount = Object.values(state.start?.made || {}).filter(Boolean).length;
+    showOverlay(`
+      <h2>Wer soll anfangen?</h2>
+      <p style="color:var(--muted); margin-top:0;">
+        Schau dir deine Karten an und wähle:
+      </p>
+      <div class="choiceRow">
+        <button class="choiceBtn" ${myMade?"disabled":""} onclick="sendStartPref('can')">✅ Ich kann starten</button>
+        <button class="choiceBtn secondary" ${myMade?"disabled":""} onclick="sendStartPref('not')">🙏 Bitte nicht ich</button>
+      </div>
+      <div class="choiceStatus">
+        ${myMade ? "Du hast gewählt. Warte auf die anderen…" : "Du hast noch nicht gewählt."}
+        <br/>
+        Entscheidungen: ${madeCount}/${state.maxPlayers}
+      </div>
+    `);
+  } else if(state.status==="win" || state.status==="lose"){
     showOverlay(`
       <h2>${state.status==="win" ? "🎉 GEWONNEN" : "💀 VERLOREN"}</h2>
       <p style="color:var(--muted); margin-top:0;">Rematch startet neue Partie, Stats bleiben.</p>
       <button onclick="rematch()">Rematch</button>
     `);
-    const tag = state.status;
-    if(lastEndSound !== tag){
+    const tag=state.status;
+    if(lastEndSound!==tag){
       beep(state.status==="win" ? 660 : 200, 180);
-      lastEndSound = tag;
+      lastEndSound=tag;
     }
   } else {
     hideOverlay();
-    lastEndSound = null;
+    lastEndSound=null;
   }
 
   // Piles
@@ -488,24 +523,23 @@ function render(){
     const d=document.createElement("div");
     d.className="pile";
     d.innerHTML=`<span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span><strong>${val}</strong>`;
-
-    pileEls[p] = d;
+    pileEls[p]=d;
 
     if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
 
-    const ping = state.pilePings?.[p];
+    const ping=state.pilePings?.[p];
     if(ping){
       const badge=document.createElement("div");
       badge.className="pilePing " + ping.type;
-      badge.textContent = ping.type === "dont" ? "🚫" : "👀";
+      badge.textContent = ping.type==="dont" ? "🚫" : "👀";
       d.appendChild(badge);
     }
 
-    d.addEventListener("dragover", (e)=> e.preventDefault());
-    d.addEventListener("drop", (e)=>{
+    d.addEventListener("dragover",(e)=>e.preventDefault());
+    d.addEventListener("drop",(e)=>{
       e.preventDefault();
-      const type = e.dataTransfer.getData("pingType");
-      if(type==="have" || type==="dont") sendPilePing(p, type);
+      const type=e.dataTransfer.getData("pingType");
+      if(type==="have"||type==="dont") sendPilePing(p,type);
     });
 
     d.onclick=()=>{
@@ -528,7 +562,6 @@ function renderHand(){
   const handDiv=document.getElementById("hand");
   handDiv.innerHTML="";
   cardEls.clear();
-
   (myHand||[]).forEach((c)=>{
     const el=document.createElement("div");
     el.className="card" + (selectedCard===c ? " selected" : "");
