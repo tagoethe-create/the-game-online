@@ -194,6 +194,21 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   will-change: transform, opacity;
 }
 
+/* ✨ Spark Effekt für ±10 Moves */
+.spark{
+  position:absolute;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  pointer-events:none;
+  opacity:0.9;
+  animation:sparkFly 420ms ease-out forwards;
+}
+@keyframes sparkFly{
+  0%{ transform: translate(0,0) scale(1); opacity:1; }
+  100%{ transform: translate(var(--dx), var(--dy)) scale(0.4); opacity:0; }
+}
+
 @media (max-width:420px){
   input{ min-width:150px; }
   .piles{ grid-template-columns:repeat(2, minmax(140px, 1fr)); }
@@ -247,9 +262,9 @@ const socket = io(SERVER_URL);
 
 let room="", myId="", state=null, myHand=[], selectedCard=null;
 let audioCtx=null;
-let armedPing = null;
-const pileEls = {};
-const cardEls = new Map();
+let armedPing = null; // "have" | "dont"
+const pileEls = {};   // pileName -> DOM element
+const cardEls = new Map(); // cardValue -> DOM element (last rendered)
 
 /* ✅ Persist Lobby + Name (Reload-friendly) */
 const LS_ROOM = "thegame_room";
@@ -361,7 +376,7 @@ function hideOverlay(){
 let lastEndSound=null;
 let lastPassHint=false;
 
-/* Ping chips: Drag (Desktop) + Tap-to-arm (Mobile) */
+/* ---- Ping chips: Drag (Desktop) + Tap-to-arm (Mobile) ---- */
 function setArmedPing(typeOrNull){
   armedPing = typeOrNull;
   document.getElementById("chipHave").classList.toggle("armed", armedPing==="have");
@@ -371,11 +386,13 @@ function setArmedPing(typeOrNull){
 ["chipHave","chipDont"].forEach(id=>{
   const el = document.getElementById(id);
 
+  // Drag
   el.addEventListener("dragstart", (e)=>{
     e.dataTransfer.setData("pingType", el.dataset.type);
     try { e.dataTransfer.effectAllowed = "copy"; } catch {}
   });
 
+  // Tap (mobile fallback)
   el.addEventListener("click", ()=>{
     const t = el.dataset.type;
     setArmedPing(armedPing===t ? null : t);
@@ -390,7 +407,7 @@ function sendPilePing(pile, type){
   beep(type==="dont" ? 240 : 860, 70);
 }
 
-/* Card animation */
+/* ✅ Card animation */
 function animateCardToPile(cardValue, pileName){
   const fromEl = cardEls.get(cardValue);
   const toEl = pileEls[pileName];
@@ -411,6 +428,7 @@ function animateCardToPile(cardValue, pileName){
   fly.style.top  = startY + "px";
   document.body.appendChild(fly);
 
+  // Richtung: up -> leicht nach oben bogen, down -> leicht nach unten bogen
   const dir = pileName.startsWith("up") ? -1 : 1;
   const midX = (startX + endX) / 2;
   const midY = (startY + endY) / 2 + dir * 80;
@@ -427,6 +445,32 @@ function animateCardToPile(cardValue, pileName){
   anim.onfinish = () => fly.remove();
 }
 
+/* ✨ Spark Effekt */
+function spawnSpark(pileEl, color){
+  const count = 4 + Math.floor(Math.random()*2); // 4–5 sparks
+  const rect = pileEl.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+
+  for(let i=0;i<count;i++){
+    const s = document.createElement("div");
+    s.className = "spark";
+    s.style.background = color;
+
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 22 + Math.random() * 14;
+
+    s.style.setProperty("--dx", `${Math.cos(angle)*dist}px`);
+    s.style.setProperty("--dy", `${Math.sin(angle)*dist}px`);
+
+    s.style.left = cx + "px";
+    s.style.top  = cy + "px";
+
+    pileEl.appendChild(s);
+    setTimeout(()=>s.remove(), 450);
+  }
+}
+
 function render(){
   if(!state) return;
 
@@ -439,6 +483,7 @@ function render(){
   const played = state.playedThisTurn?.[myId] ?? 0;
   const minPlays = minPlaysThisTurn();
 
+  // ✅ Turn ring
   const ring = document.getElementById("turnRing");
   if(state.status==="waiting"){
     document.getElementById("turnInfo").innerText=`Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
@@ -501,6 +546,7 @@ function render(){
       d.appendChild(badge);
     }
 
+    // Drag target (desktop)
     d.addEventListener("dragover", (e)=> e.preventDefault());
     d.addEventListener("drop", (e)=>{
       e.preventDefault();
@@ -508,6 +554,7 @@ function render(){
       if(type==="have" || type==="dont") sendPilePing(p, type);
     });
 
+    // Tap target (mobile fallback)
     d.onclick=()=>{
       if(armedPing){
         sendPilePing(p, armedPing);
@@ -533,7 +580,9 @@ function renderHand(){
     const el=document.createElement("div");
     el.className="card" + (selectedCard===c ? " selected" : "");
     el.innerText=c;
+
     cardEls.set(c, el);
+
     el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
     handDiv.appendChild(el);
   });
@@ -544,10 +593,25 @@ function tryPlay(pile){
   if(state.turn!==myId) return toast("Nicht dein Zug.");
   if(selectedCard===null) return toast("Erst eine Karte auswählen.");
 
-  const ok=isValid(selectedCard, pile, state.piles[pile]);
+  const prevVal = state.piles[pile];
+  const ok=isValid(selectedCard, pile, prevVal);
   if(!ok) return toast("Dort nicht erlaubt.");
 
+  // ✅ Animation
   animateCardToPile(selectedCard, pile);
+
+  // ✨ Spark nur bei Special-Move
+  const diff = selectedCard - prevVal;
+  const isUp = pile.startsWith("up");
+  const isDown = pile.startsWith("down");
+  const isSpecial = (isUp && diff === -10) || (isDown && diff === 10);
+
+  if(isSpecial){
+    const color = isUp ? "#4caf50" : "#ff9800";
+    const pileEl = pileEls[pile];
+    if(pileEl) spawnSpark(pileEl, color);
+  }
+
   socket.emit("play", { room, card:selectedCard, pile });
   beep(740,55);
   selectedCard=null;
