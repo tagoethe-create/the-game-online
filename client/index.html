@@ -184,11 +184,7 @@ function render() {
     }
 
     el.onclick = () => selectedPile = p;
-
-if (selectedCard !== null &&
-    isValid(selectedCard, game.piles[p], p)) {
-  el.classList.add("valid");
-}
+    pilesDiv.appendChild(el);
   }
 
   const handDiv = document.getElementById("hand");
