@@ -44,6 +44,31 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   color:var(--muted);
 }
 
+/* ✅ Turn Ring wrapper */
+#turnInfoWrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  justify-content:center;
+}
+
+/* ✅ Turn-Ring (ruhig rotierend, kein Countdown) */
+.turnRing{
+  width:18px;
+  height:18px;
+  border-radius:999px;
+  border:2px solid rgba(160,160,160,.35);
+  border-top-color: rgba(242,242,242,.95);
+  opacity:.9;
+}
+.turnRing.spinning{
+  animation: turnSpin 1.15s linear infinite;
+}
+@keyframes turnSpin{
+  from{ transform: rotate(0deg); }
+  to{ transform: rotate(360deg); }
+}
+
 #pingbar{
   display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
   margin:10px 0 6px;
@@ -190,7 +215,12 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
 <div id="topbar">
   <div id="lobbyInfo"></div>
   <div id="deckInfo"></div>
-  <div id="turnInfo"></div>
+
+  <div id="turnInfoWrap">
+    <div id="turnRing" class="turnRing" aria-hidden="true"></div>
+    <div id="turnInfo"></div>
+  </div>
+
   <div id="statsInfo"></div>
 </div>
 
@@ -217,7 +247,7 @@ const socket = io(SERVER_URL);
 
 let room="", myId="", state=null, myHand=[], selectedCard=null;
 let audioCtx=null;
-let armedPing = null; // "have" | "dont"
+let armedPing = null; // "have" | "dont" (mobile fallback)
 const pileEls = {};   // pileName -> DOM element
 const cardEls = new Map(); // cardValue -> DOM element (last rendered)
 
@@ -358,12 +388,10 @@ function animateCardToPile(cardValue, pileName){
   fly.style.top  = startY + "px";
   document.body.appendChild(fly);
 
-  // Richtung: up -> leicht nach oben bogen, down -> leicht nach unten bogen
   const dir = pileName.startsWith("up") ? -1 : 1;
   const midX = (startX + endX) / 2;
   const midY = (startY + endY) / 2 + dir * 80;
 
-  // Web Animations API (läuft gut auf iOS/Safari)
   const anim = fly.animate([
     { transform: `translate(-50%, -50%) scale(1)`, opacity: 1, offset: 0, left: startX+"px", top: startY+"px" },
     { transform: `translate(-50%, -50%) scale(1.06)`, opacity: 1, offset: 0.55, left: midX+"px", top: midY+"px" },
@@ -388,16 +416,24 @@ function render(){
   const played = state.playedThisTurn?.[myId] ?? 0;
   const minPlays = minPlaysThisTurn();
 
+  // ✅ Turn ring
+  const ring = document.getElementById("turnRing");
+
   if(state.status==="waiting"){
     document.getElementById("turnInfo").innerText=`Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
+    ring.classList.remove("spinning");
   } else if(state.status==="playing"){
     document.getElementById("turnInfo").innerText = isMyTurn
       ? `DEIN ZUG • gespielt: ${played}/${minPlays} ${state.deckCount===0 ? "(Deck leer)" : ""}`
       : `Jemand anderes ist dran`;
+
+    ring.classList.toggle("spinning", isMyTurn);
   } else {
     document.getElementById("turnInfo").innerText="";
+    ring.classList.remove("spinning");
   }
 
+  // EndTurn Button: (>=minPlays) oder PASS wenn keine legalen Züge
   const endBtn=document.getElementById("endTurnBtn");
   const canPass = isMyTurn && !hasAnyLegalMove();
   endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
@@ -433,10 +469,12 @@ function render(){
     d.className="pile";
     d.innerHTML=`<span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span><strong>${val}</strong>`;
 
-    pileEls[p] = d; // store for animation target
+    pileEls[p] = d;
 
+    // legal highlight for selected card
     if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
 
+    // show pile ping
     const ping = state.pilePings?.[p];
     if(ping){
       const badge=document.createElement("div");
@@ -445,7 +483,7 @@ function render(){
       d.appendChild(badge);
     }
 
-    // Drag target for ping (desktop)
+    // Drag target (desktop) for ping
     d.addEventListener("dragover", (e)=> e.preventDefault());
     d.addEventListener("drop", (e)=>{
       e.preventDefault();
