@@ -18,76 +18,8 @@ body {
 
 h1 { margin-bottom: 10px; }
 
-#topbar {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 15px;
-}
-
-#game {
-  display: flex;
-  justify-content: center;
-  gap: 40px;
-  margin-top: 20px;
-}
-
-.piles {
-  display: grid;
-  grid-template-columns: repeat(2, 120px);
-  gap: 20px;
-}
-
-.pile {
-  background: #1e1e1e;
-  border: 2px solid #555;
-  border-radius: 12px;
-  padding: 15px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.pile:hover {
-  border-color: #fff;
-}
-
-.pile span {
-  font-size: 14px;
-  opacity: 0.7;
-}
-
-.pile strong {
-  display: block;
-  font-size: 28px;
-  margin-top: 5px;
-}
-
-#hand {
-  margin-top: 30px;
-}
-
-.card {
-  display: inline-block;
-  background: #2c2c2c;
-  padding: 12px 18px;
-  margin: 8px;
-  border-radius: 10px;
-  font-size: 18px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.card:hover {
-  transform: translateY(-6px);
-  background: #3a3a3a;
-}
-
-.valid {
-  border-color: #4caf50 !important;
-}
-
 #join {
-  margin-top: 10px;
+  margin-bottom: 15px;
 }
 
 input, button {
@@ -100,6 +32,70 @@ button {
   background: #4caf50;
   color: black;
   cursor: pointer;
+}
+
+#topbar {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 15px;
+}
+
+#game {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.piles {
+  display: grid;
+  grid-template-columns: repeat(2, 130px);
+  gap: 20px;
+}
+
+.pile {
+  background: #1e1e1e;
+  border: 2px solid #555;
+  border-radius: 14px;
+  padding: 15px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.pile span {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.pile strong {
+  display: block;
+  font-size: 28px;
+  margin-top: 6px;
+}
+
+.pile.valid {
+  border-color: #4caf50;
+  box-shadow: 0 0 10px #4caf50;
+}
+
+#hand {
+  margin-top: 30px;
+}
+
+.card {
+  display: inline-block;
+  background: #2c2c2c;
+  padding: 12px 18px;
+  margin: 8px;
+  border-radius: 12px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  background: #3a3a3a;
 }
 </style>
 </head>
@@ -133,33 +129,42 @@ let room = "";
 let myId = "";
 let game = null;
 let selectedPile = null;
+let selectedCard = null;
 
 function join() {
   room = document.getElementById("room").value;
   socket.emit("join", room);
 }
 
-socket.on("joined", id => myId = id);
+socket.on("joined", id => {
+  myId = id;
+});
+
 socket.on("state", g => {
   game = g;
   render();
 });
 
+function isValid(card, pileValue, pileName) {
+  if (pileName.startsWith("up")) {
+    return card > pileValue || card === pileValue - 10;
+  } else {
+    return card < pileValue || card === pileValue + 10;
+  }
+}
+
 function render() {
   if (!game) return;
 
-  // Deck & other players
   document.getElementById("deck").innerText =
     "Nachziehstapel: " + game.deck.length;
 
   const others = Object.keys(game.players)
-    .filter(id => id !== myId)
-    .length;
+    .filter(id => id !== myId).length;
 
   document.getElementById("others").innerText =
     "Mitspieler: " + others;
 
-  // Piles
   const pilesDiv = document.getElementById("piles");
   pilesDiv.innerHTML = "";
 
@@ -170,11 +175,18 @@ function render() {
       <span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span>
       <strong>${game.piles[p]}</strong>
     `;
+
+    if (
+      selectedCard !== null &&
+      isValid(selectedCard, game.piles[p], p)
+    ) {
+      el.classList.add("valid");
+    }
+
     el.onclick = () => selectedPile = p;
     pilesDiv.appendChild(el);
   }
 
-  // Hand
   const handDiv = document.getElementById("hand");
   handDiv.innerHTML = "";
 
@@ -182,17 +194,25 @@ function render() {
     const c = document.createElement("div");
     c.className = "card";
     c.innerText = card;
-    c.onclick = () => play(card);
+    c.onclick = () => selectCard(card);
     handDiv.appendChild(c);
   });
 }
 
-function play(card) {
-  if (!selectedPile) {
-    alert("Bitte zuerst einen Stapel wählen");
-    return;
-  }
-  socket.emit("play", { room, card, pile: selectedPile });
+function selectCard(card) {
+  selectedCard = card;
+  render();
+
+  if (!selectedPile) return;
+
+  socket.emit("play", {
+    room,
+    card,
+    pile: selectedPile
+  });
+
+  selectedCard = null;
+  selectedPile = null;
 }
 </script>
 
