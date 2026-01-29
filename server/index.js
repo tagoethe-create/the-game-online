@@ -26,7 +26,7 @@ function newRoom(room, maxPlayers) {
     status: "waiting",      // waiting | playing | win | lose
     maxPlayers: Math.max(2, Math.min(4, Number(maxPlayers) || 2)),
     handSize: 6,
-    stats: { games: 0, wins: 0, losses: 0 }, // pro Lobby (bis Server-Neustart)
+    stats: { games: 0, wins: 0, losses: 0 },
     pilePings: {}           // pile -> { type, from, ts }
   };
 }
@@ -84,7 +84,14 @@ function emitState(room) {
 io.on("connection", (socket) => {
   socket.on("create", ({ room, maxPlayers }) => {
     if (!room) return;
-    if (!games[room]) newRoom(room, maxPlayers);
+
+    // ✅ Lobby neu anlegen, wenn sie nicht existiert ODER leer/kaputt ist
+    if (!games[room]) {
+      newRoom(room, maxPlayers);
+    } else if (games[room] && Object.keys(games[room].players || {}).length === 0) {
+      newRoom(room, maxPlayers);
+    }
+
     socket.join(room);
     emitState(room);
   });
@@ -117,7 +124,6 @@ io.on("connection", (socket) => {
     g.pilePings[pile] = { type: safeType, from: g.players[socket.id]?.name || "Spieler", ts: Date.now() };
     emitState(room);
 
-    // Auto-clear nach 4s (nur wenn es derselbe Ping ist)
     const ts = g.pilePings[pile].ts;
     setTimeout(() => {
       const gg = games[room];
@@ -157,7 +163,7 @@ io.on("connection", (socket) => {
     const played = g.playedThisTurn[socket.id] || 0;
     const minPlays = g.deck.length === 0 ? 1 : 2;
 
-    // PASS erlaubt, wenn du keinen legalen Zug hast
+    // ✅ PASS erlaubt, wenn du keinen legalen Zug hast
     if (played < minPlays && anyLegalMoveForPlayer(g, socket.id)) {
       return socket.emit(
         "errorMsg",
