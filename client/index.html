@@ -6,78 +6,46 @@
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 <style>
-body {
-  background: #121212;
-  color: #f2f2f2;
-  font-family: system-ui;
-  text-align: center;
-  padding: 20px;
-}
-
-.piles {
-  display: grid;
-  grid-template-columns: repeat(2, 140px);
-  gap: 20px;
-  justify-content: center;
-}
-
-.pile {
-  background: #1e1e1e;
-  border: 2px solid #555;
-  border-radius: 14px;
-  padding: 15px;
-  cursor: pointer;
-}
-
-.pile.valid {
-  border-color: #4caf50;
-  box-shadow: 0 0 10px #4caf50;
-}
-
-.card {
-  background: #2c2c2c;
-  display: inline-block;
-  padding: 12px 18px;
-  margin: 8px;
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-button {
-  padding: 10px 16px;
-  margin-top: 15px;
-  border-radius: 8px;
-  border: none;
-  background: #4caf50;
-  cursor: pointer;
-}
+body { background:#121212; color:#f2f2f2; font-family:system-ui; text-align:center; padding:20px; }
+input, button { padding:8px 12px; border-radius:6px; border:none; margin:3px;}
+button { background:#4caf50; cursor:pointer; }
+.piles { display:grid; grid-template-columns:repeat(2,140px); gap:20px; justify-content:center; margin-top:20px;}
+.pile { background:#1e1e1e; border:2px solid #555; border-radius:14px; padding:15px; cursor:pointer;}
+.pile.valid { border-color:#4caf50; box-shadow:0 0 10px #4caf50; }
+.card { background:#2c2c2c; display:inline-block; padding:12px 18px; margin:8px; border-radius:12px; cursor:pointer; }
+#hand { margin-top:20px; }
+#overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:#000a; display:flex; flex-direction:column; justify-content:center; align-items:center; font-size:24px; color:#fff;}
 </style>
 </head>
 
 <body>
-
 <h1>The Game 🃏</h1>
 
-<input id="room" placeholder="Lobby-Code">
-<button onclick="join()">Beitreten</button>
+<div>
+  <input id="room" placeholder="Lobby-Code">
+  <input id="maxPlayers" placeholder="Spieleranzahl (2-4)" type="number" min="2" max="4" value="2">
+  <button onclick="create()">Lobby erstellen</button>
+  <button onclick="join()">Beitreten</button>
+</div>
 
 <h3 id="info"></h3>
-
-<div class="piles" id="piles"></div>
-
-<h2>Deine Karten</h2>
+<div id="piles" class="piles"></div>
 <div id="hand"></div>
-
-<button id="endTurn" onclick="endTurn()" style="display:none">
-Zug beenden
-</button>
-
+<button id="endTurn" onclick="endTurn()" style="display:none">Zug beenden</button>
 <div id="overlay"></div>
 
 <script>
-const socket = io("https://the-game-server-h9br.onrender.com");
+const SERVER_URL = "https://the-game-server-h9br.onrender.com";
+const socket = io(SERVER_URL);
 
 let room="", myId="", game=null, selectedCard=null;
+
+function create(){
+  const maxPlayers=parseInt(document.getElementById("maxPlayers").value);
+  room=document.getElementById("room").value;
+  socket.emit("create",{room,maxPlayers});
+  join();
+}
 
 function join(){
   room=document.getElementById("room").value;
@@ -99,37 +67,35 @@ function isValid(card,pile,val){
 function render(){
   if(!game) return;
 
-  if(game.status!=="playing"){
+  if(game.status!=="playing" && game.status!=="waiting"){
     document.getElementById("overlay").innerHTML=
       `<h1>${game.status==="win"?"🎉 GEWONNEN":"💀 VERLOREN"}</h1>
        <button onclick="rematch()">Rematch</button>`;
-    return;
+  } else {
+    document.getElementById("overlay").innerHTML="";
   }
 
-  document.getElementById("info").innerText =
-    game.turn===myId
-    ? `Dein Zug – Karten gespielt: ${game.playedThisTurn[myId]}/2`
-    : `Warten auf Mitspieler`;
+  let info="";
+  if(game.status==="waiting"){
+    info=`Warte auf Spieler: ${Object.keys(game.players).length}/${game.maxPlayers}`;
+  } else if(game.turn===myId){
+    info=`Dein Zug – Karten gespielt: ${game.playedThisTurn[myId]}/2`;
+  } else info="Warten auf Mitspieler";
+  document.getElementById("info").innerText=info;
 
-  document.getElementById("endTurn").style.display =
+  document.getElementById("endTurn").style.display=
     game.turn===myId && game.playedThisTurn[myId]>=2
-    ? "inline-block" : "none";
+    ?"inline-block":"none";
 
-  const piles=document.getElementById("piles");
-  piles.innerHTML="";
-
+  const pilesDiv=document.getElementById("piles");
+  pilesDiv.innerHTML="";
   for(const p in game.piles){
     const d=document.createElement("div");
     d.className="pile";
     d.innerText=`${p}\n${game.piles[p]}`;
-
-    if(
-      selectedCard &&
-      isValid(selectedCard,p,game.piles[p])
-    ) d.classList.add("valid");
-
+    if(selectedCard && isValid(selectedCard,p,game.piles[p])) d.classList.add("valid");
     d.onclick=()=>play(p);
-    piles.appendChild(d);
+    pilesDiv.appendChild(d);
   }
 
   const hand=document.getElementById("hand");
@@ -138,7 +104,7 @@ function render(){
     const el=document.createElement("div");
     el.className="card";
     el.innerText=c;
-    el.onclick=()=>{selectedCard=c;render();}
+    el.onclick=()=>{selectedCard=c; render();}
     hand.appendChild(el);
   });
 }
@@ -155,9 +121,7 @@ function endTurn(){
 
 function rematch(){
   socket.emit("rematch",room);
-  document.getElementById("overlay").innerHTML="";
 }
 </script>
-
 </body>
 </html>
