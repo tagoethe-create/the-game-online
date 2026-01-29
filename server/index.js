@@ -23,11 +23,13 @@ function newRoom(room, maxPlayers) {
     players: {},            // socketId -> { name, hand: [] }
     playedThisTurn: {},     // socketId -> number
     turn: null,
-    status: "waiting",      // waiting | playing | win | lose
+    status: "waiting",      // waiting | choosing_start | playing | win | lose
     maxPlayers: Math.max(2, Math.min(4, Number(maxPlayers) || 2)),
     handSize: 6,
     stats: { games: 0, wins: 0, losses: 0 },
-    pilePings: {}           // pile -> { type, from, ts }
+    pilePings: {},          // pile -> { type, from, ts }
+    startPrefs: {},         // socketId -> "can" | "not"
+    startChoiceMade: {}     // socketId -> boolean
   };
 }
 
@@ -56,6 +58,33 @@ function refillHand(game, pid) {
   }
 }
 
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function allStartChoicesMade(game) {
+  const ids = Object.keys(game.players);
+  return ids.length > 0 && ids.every((id) => game.startChoiceMade[id]);
+}
+
+function finalizeStartingPlayer(game) {
+  const ids = Object.keys(game.players);
+  const can = ids.filter((id) => game.startPrefs[id] === "can");
+  const not = ids.filter((id) => game.startPrefs[id] === "not");
+
+  let starter = null;
+  if (can.length === 1) starter = can[0];
+  else if (can.length > 1) starter = pickRandom(can);
+  else {
+    // keiner will -> zufällig unter allen (oder optional: bevorzugt "not" vermeiden, aber dann bleibt ggf. keiner)
+    starter = pickRandom(ids);
+  }
+
+  game.turn = starter;
+  game.status = "playing";
+  for (const id of ids) game.playedThisTurn[id] = 0;
+}
+
 function emitState(room) {
   const g = games[room];
   if (!g) return;
@@ -72,7 +101,11 @@ function emitState(room) {
     players: Object.fromEntries(
       Object.entries(g.players).map(([id, p]) => [id, { name: p.name, handCount: p.hand.length }])
     ),
-    stats: g.stats
+    stats: g.stats,
+    start: {
+      prefs: g.startPrefs,
+      made: g.startChoiceMade
+    }
   });
 
   for (const pid in g.players) {
@@ -85,7 +118,6 @@ io.on("connection", (socket) => {
   socket.on("create", ({ room, maxPlayers }) => {
     if (!room) return;
 
-    // ✅ Lobby neu anlegen, wenn sie nicht existiert ODER leer/kaputt ist
     if (!games[room]) {
       newRoom(room, maxPlayers);
     } else if (games[room] && Object.keys(games[room].players || {}).length === 0) {
@@ -102,20 +134,41 @@ io.on("connection", (socket) => {
     if (Object.keys(g.players).length >= g.maxPlayers) return socket.emit("errorMsg", "Lobby ist voll.");
 
     socket.join(room);
+
     g.players[socket.id] = { name: (name || "Spieler").toString().slice(0, 18), hand: [] };
     g.playedThisTurn[socket.id] = 0;
+    g.startPrefs[socket.id] = null;
+    g.startChoiceMade[socket.id] = false;
 
     refillHand(g, socket.id);
 
+    // Wenn Lobby voll ist: Startwahl-Phase (statt sofort playing)
     if (g.status === "waiting" && Object.keys(g.players).length === g.maxPlayers) {
-      g.status = "playing";
-      g.turn = Object.keys(g.players)[0];
+      g.status = "choosing_start";
+      g.turn = null;
     }
 
     emitState(room);
   });
 
-  // ✅ Stapel-Ping (👀 / 🚫)
+  // ✅ Startpräferenz setzen
+  socket.on("startPref", ({ room, pref }) => {
+    const g = games[room];
+    if (!g) return;
+    if (g.status !== "choosing_start") return;
+    if (!g.players[socket.id]) return;
+
+    const p = pref === "can" ? "can" : "not";
+    g.startPrefs[socket.id] = p;
+    g.startChoiceMade[socket.id] = true;
+
+    // Wenn alle gewählt haben: Starter bestimmen und starten
+    if (allStartChoicesMade(g)) {
+      finalizeStartingPlayer(g);
+    }
+    emitState(room);
+  });
+
   socket.on("pilePing", ({ room, pile, type }) => {
     const g = games[room];
     if (!g || !g.piles[pile]) return;
@@ -151,7 +204,6 @@ io.on("connection", (socket) => {
     pl.hand = pl.hand.filter((x) => x !== c);
     g.playedThisTurn[socket.id] = (g.playedThisTurn[socket.id] || 0) + 1;
 
-    // ✅ NICHT nachziehen hier!
     emitState(room);
   });
 
@@ -163,7 +215,6 @@ io.on("connection", (socket) => {
     const played = g.playedThisTurn[socket.id] || 0;
     const minPlays = g.deck.length === 0 ? 1 : 2;
 
-    // ✅ PASS erlaubt, wenn du keinen legalen Zug hast
     if (played < minPlays && anyLegalMoveForPlayer(g, socket.id)) {
       return socket.emit(
         "errorMsg",
@@ -171,10 +222,8 @@ io.on("connection", (socket) => {
       );
     }
 
-    // ✅ Jetzt erst auffüllen
     refillHand(g, socket.id);
 
-    // WIN
     const ids = Object.keys(g.players);
     const allHandsEmpty = ids.every((id) => (g.players[id]?.hand.length || 0) === 0);
     if (g.deck.length === 0 && allHandsEmpty) {
@@ -185,7 +234,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // LOSE (nur wenn wirklich niemand mehr kann)
     if (!anyLegalMoveForAnyone(g)) {
       g.status = "lose";
       g.stats.games += 1;
@@ -194,7 +242,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Turn weitergeben
     g.playedThisTurn[socket.id] = 0;
     const idx = ids.indexOf(socket.id);
     g.turn = ids[(idx + 1) % ids.length];
@@ -212,17 +259,18 @@ io.on("connection", (socket) => {
     newRoom(room, maxPlayers);
     games[room].stats = stats;
 
-    // Spieler im Raum rekonstruieren (ohne neues Join nötig)
     const clients = Array.from(io.sockets.adapter.rooms.get(room) || []);
     for (const sid of clients) {
       games[room].players[sid] = { name: "Spieler", hand: [] };
       games[room].playedThisTurn[sid] = 0;
+      games[room].startPrefs[sid] = null;
+      games[room].startChoiceMade[sid] = false;
       refillHand(games[room], sid);
     }
 
     if (Object.keys(games[room].players).length === games[room].maxPlayers) {
-      games[room].status = "playing";
-      games[room].turn = Object.keys(games[room].players)[0];
+      games[room].status = "choosing_start";
+      games[room].turn = null;
     } else {
       games[room].status = "waiting";
       games[room].turn = null;
@@ -238,12 +286,22 @@ io.on("connection", (socket) => {
 
       delete g.players[socket.id];
       delete g.playedThisTurn[socket.id];
+      delete g.startPrefs[socket.id];
+      delete g.startChoiceMade[socket.id];
 
       const ids = Object.keys(g.players);
       if (ids.length === 0) {
         delete games[room];
         continue;
       }
+
+      // Wenn wir in Startwahl waren, und Spieler weg ist: prüfen ob alle verbliebenen schon gewählt haben
+      if (g.status === "choosing_start") {
+        if (allStartChoicesMade(g)) {
+          finalizeStartingPlayer(g);
+        }
+      }
+
       if (g.turn === socket.id) g.turn = ids[0];
 
       emitState(room);
