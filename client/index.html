@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>The Game – Online</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f6f6f6;
+      text-align: center;
+    }
+    .pile, .card {
+      display: inline-block;
+      padding: 12px;
+      margin: 6px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .pile {
+      background: white;
+      border: 2px solid #444;
+      width: 90px;
+      font-weight: bold;
+    }
+    .card {
+      background: #222;
+      color: white;
+      min-width: 50px;
+    }
+    .card:hover {
+      transform: scale(1.05);
+    }
+    #hand {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>The Game 🃏</h1>
+
+<input id="room" placeholder="Lobby-Code" />
+<button onclick="join()">Beitreten</button>
+
+<h3 id="status"></h3>
+
+<div id="piles"></div>
+
+<h2>Deine Karten</h2>
+<div id="hand"></div>
+
+<script>
+const SERVER_URL = "https://the-game-server-h9br.onrender.com";
+const socket = io(SERVER_URL);
+
+let room = "";
+let myId = "";
+let game = null;
+let selectedPile = null;
+
+function join() {
+  room = document.getElementById("room").value;
+  socket.emit("join", room);
+}
+
+socket.on("joined", id => {
+  myId = id;
+  document.getElementById("status").innerText =
+    "Verbunden – Raum: " + room;
+});
+
+socket.on("state", g => {
+  game = g;
+  render();
+});
+
+function render() {
+  if (!game) return;
+
+  const pilesDiv = document.getElementById("piles");
+  pilesDiv.innerHTML = "";
+
+  for (const p in game.piles) {
+    const el = document.createElement("div");
+    el.className = "pile";
+    el.innerText = p + "\n" + game.piles[p];
+    el.onclick = () => selectedPile = p;
+    pilesDiv.appendChild(el);
+  }
+
+  const handDiv = document.getElementById("hand");
+  handDiv.innerHTML = "";
+
+  (game.players[myId] || []).forEach(card => {
+    const c = document.createElement("div");
+    c.className = "card";
+    c.innerText = card;
+    c.onclick = () => play(card);
+    handDiv.appendChild(c);
+  });
+}
+
+function play(card) {
+  if (!selectedPile) {
+    alert("Bitte zuerst einen Stapel anklicken!");
+    return;
+  }
+  socket.emit("play", {
+    room,
+    card,
+    pile: selectedPile
+  });
+}
+</script>
+
+</body>
+</html>
