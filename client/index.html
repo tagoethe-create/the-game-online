@@ -2,108 +2,136 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>The Game – Online</title>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 <style>
-body {
-  background:#121212;
-  color:#f2f2f2;
-  font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+:root { --bg:#121212; --panel:#1e1e1e; --card:#2c2c2c; --accent:#4caf50; --text:#f2f2f2; --muted:#a0a0a0; }
+
+body{
+  margin:0; padding:16px;
+  background:var(--bg); color:var(--text);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   text-align:center;
-  padding:20px;
-  margin:0;
 }
 
-h1 { margin: 10px 0 16px; }
+h1{ margin:8px 0 12px; }
 
 #controls{
-  display:flex;
-  justify-content:center;
-  flex-wrap:wrap;
-  gap:10px;
-  margin-bottom:14px;
+  display:flex; flex-wrap:wrap; justify-content:center;
+  gap:10px; margin-bottom:10px;
 }
 
-input, button {
-  padding:10px 14px;
-  border-radius:10px;
-  border:none;
+input, button, select{
   font-size:16px;
+  padding:12px 14px;
+  border-radius:12px;
+  border:none;
 }
 
-input { min-width: 180px; }
+input{ min-width:180px; }
 
-button {
-  background:#4caf50;
+button{
+  background:var(--accent);
+  color:#0b0b0b;
   cursor:pointer;
+  min-height:44px; /* Handy-friendly */
 }
 
-button:active { transform: scale(0.98); }
+button.secondary{
+  background:#2b2b2b; color:var(--text);
+}
 
-.piles {
+#topbar{
+  display:flex; flex-wrap:wrap; justify-content:center;
+  gap:10px; margin:10px 0 6px;
+  color:var(--muted);
+}
+
+.piles{
   display:grid;
-  grid-template-columns:repeat(2,150px);
-  gap:16px;
+  grid-template-columns:repeat(2, minmax(140px, 160px));
+  gap:14px;
   justify-content:center;
-  margin-top:16px;
+  margin:14px 0;
 }
 
-.pile {
-  background:#1e1e1e;
+.pile{
+  background:var(--panel);
   border:2px solid #555;
-  border-radius:14px;
-  padding:16px 12px;
-  cursor:pointer;
+  border-radius:16px;
+  padding:14px 10px;
   user-select:none;
+  min-height:78px;
+  display:flex; flex-direction:column; justify-content:center;
 }
 
-.pile.valid {
-  border-color:#4caf50;
-  box-shadow:0 0 10px #4caf50;
-}
+.pile strong{ font-size:28px; margin-top:4px; display:block; }
+.pile span{ font-size:13px; color:var(--muted); }
 
-#hand { margin-top:14px; }
+.pile.valid{ border-color:var(--accent); box-shadow:0 0 10px rgba(76,175,80,.7); }
 
-.card {
-  background:#2c2c2c;
+#hand{ margin-top:10px; }
+.card{
   display:inline-block;
+  background:var(--card);
   padding:14px 18px;
-  margin:8px;
-  border-radius:14px;
-  cursor:pointer;
+  margin:8px 8px;
+  border-radius:16px;
   font-size:18px;
   min-width:56px;
   user-select:none;
 }
+.card.selected{ outline:2px solid var(--accent); box-shadow:0 0 10px rgba(76,175,80,.7); }
 
-.card.selected {
-  outline: 2px solid #4caf50;
-  box-shadow: 0 0 10px #4caf50;
+#actions{
+  display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
+  margin-top:10px;
 }
 
-#endTurn { display:none; margin-top:14px; }
+#pingbar{
+  display:flex; justify-content:center; gap:8px; flex-wrap:wrap;
+  margin:10px 0 4px;
+}
 
-/* ✅ WICHTIG: Overlay ist standardmäßig AUS */
-#overlay {
+.pingbtn{ background:#2b2b2b; color:var(--text); }
+
+#toast{
   position:fixed;
-  inset:0;
-  background:rgba(0,0,0,0.7);
-  display:none;                 /* <<< FIX */
-  justify-content:center;
-  align-items:center;
-  flex-direction:column;
+  left:50%; transform:translateX(-50%);
+  bottom:18px;
+  background:#000c;
+  color:var(--text);
+  padding:10px 14px;
+  border-radius:14px;
+  display:none;
   z-index:9999;
-  padding:20px;
+  max-width:min(520px, 92vw);
+}
+
+#overlay{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.72);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9998;
+  padding:18px;
 }
 #overlay .box{
-  background:#1e1e1e;
+  width:min(520px, 92vw);
+  background:var(--panel);
   border:2px solid #555;
-  border-radius:16px;
-  padding:18px 16px;
-  width:min(420px, 90vw);
+  border-radius:18px;
+  padding:16px;
 }
-#overlay h1{ margin: 0 0 12px; }
+#overlay h2{ margin:6px 0 10px; }
+
+@media (max-width:420px){
+  input{ min-width:150px; }
+  .piles{ grid-template-columns:repeat(2, minmax(140px, 1fr)); }
+}
 </style>
 </head>
 
@@ -112,21 +140,37 @@ button:active { transform: scale(0.98); }
 
 <div id="controls">
   <input id="room" placeholder="Lobby-Code">
-  <input id="maxPlayers" placeholder="Spieleranzahl (2-4)" type="number" min="2" max="4" value="2">
+  <input id="name" placeholder="Name (optional)">
+  <input id="maxPlayers" type="number" min="2" max="4" value="2" style="width:90px" title="2–4 Spieler">
   <button onclick="create()">Lobby erstellen</button>
-  <button onclick="join()">Beitreten</button>
+  <button class="secondary" onclick="join()">Beitreten</button>
 </div>
 
-<h3 id="info"></h3>
+<div id="topbar">
+  <div id="lobbyInfo"></div>
+  <div id="deckInfo"></div>
+  <div id="turnInfo"></div>
+  <div id="statsInfo"></div>
+</div>
 
-<div id="piles" class="piles"></div>
+<div id="pingbar">
+  <button class="pingbtn" onclick="sendPing('have')">👀 Ich hab was</button>
+  <button class="pingbtn" onclick="sendPing('dont')">🚫 Bitte nicht</button>
+  <button class="pingbtn" onclick="sendPing('ok')">✅ Ok</button>
+  <button class="pingbtn" onclick="sendPing('?')">❓</button>
+</div>
+
+<div class="piles" id="piles"></div>
 
 <h2>Deine Karten</h2>
 <div id="hand"></div>
 
-<button id="endTurn" onclick="endTurn()">Zug beenden</button>
+<div id="actions">
+  <button id="endTurnBtn" onclick="endTurn()" style="display:none;">Zug beenden</button>
+</div>
 
 <div id="overlay"></div>
+<div id="toast"></div>
 
 <script>
 const SERVER_URL = "https://the-game-server-h9br.onrender.com";
@@ -134,44 +178,84 @@ const socket = io(SERVER_URL);
 
 let room = "";
 let myId = "";
-let game = null;
+let state = null;     // public state
+let myHand = [];      // private
 let selectedCard = null;
 
+// --- Mini-Sounds (WebAudio Beeps) ---
+let audioCtx = null;
+function beep(freq=440, ms=70){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = "sine";
+    o.frequency.value = freq;
+    g.gain.value = 0.06;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    setTimeout(()=>{ o.stop(); }, ms);
+  }catch(e){}
+}
+
+// Toast
+let toastTimer=null;
+function toast(text){
+  const t = document.getElementById("toast");
+  t.innerText = text;
+  t.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.style.display="none", 1800);
+}
+
 function create(){
-  const maxPlayers = Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value || "2")));
   room = document.getElementById("room").value.trim();
   if(!room) return alert("Bitte Lobby-Code eingeben");
+  const maxPlayers = Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value || "2")));
   socket.emit("create", { room, maxPlayers });
-  // danach direkt beitreten
-  socket.emit("join", room);
+  join(); // direkt rein
 }
 
 function join(){
   room = document.getElementById("room").value.trim();
   if(!room) return alert("Bitte Lobby-Code eingeben");
-  socket.emit("join", room);
+  const name = document.getElementById("name").value.trim();
+  socket.emit("join", { room, name });
+  beep(520, 60);
 }
 
-socket.on("error", (msg) => alert(msg));
+socket.on("errorMsg", (msg)=>{ alert(msg); });
 
-socket.on("state", g=>{
-  game = g;
-  myId = socket.id; // socket.id ist zuverlässig
+socket.on("state", (s)=>{
+  state = s;
+  myId = socket.id;
   render();
 });
 
-function isValid(card, pile, val){
-  return pile.startsWith("up")
-    ? (card > val || card === val - 10)
-    : (card < val || card === val + 10);
+socket.on("hand", (hand)=>{
+  myHand = hand || [];
+  renderHand(); // schneller
+});
+
+socket.on("ping", ({from, type})=>{
+  const map = { have:"👀", dont:"🚫", ok:"✅", "?":"❓" };
+  toast(`${map[type]||"🔔"} ${from}: ${type}`);
+  beep(880, 70);
+});
+
+// Validity
+function isValid(card, pileName, pileValue){
+  return pileName.startsWith("up")
+    ? (card > pileValue || card === pileValue - 10)
+    : (card < pileValue || card === pileValue + 10);
 }
 
+// Overlay
 function showOverlay(html){
   const ov = document.getElementById("overlay");
   ov.innerHTML = `<div class="box">${html}</div>`;
   ov.style.display = "flex";
 }
-
 function hideOverlay(){
   const ov = document.getElementById("overlay");
   ov.style.display = "none";
@@ -179,78 +263,110 @@ function hideOverlay(){
 }
 
 function render(){
-  if(!game) return;
+  if(!state) return;
 
-  // ✅ Overlay korrekt an/aus
-  if(game.status !== "playing" && game.status !== "waiting"){
+  // Top infos
+  const joined = Object.keys(state.players || {}).length;
+  document.getElementById("lobbyInfo").innerText = `Lobby: ${state.room} • Spieler: ${joined}/${state.maxPlayers}`;
+  document.getElementById("deckInfo").innerText = `Deck: ${state.deckCount}`;
+  document.getElementById("statsInfo").innerText = `Stats: ${state.stats?.wins||0}W / ${state.stats?.losses||0}L (Games: ${state.stats?.games||0})`;
+
+  // Turn info
+  const isMyTurn = state.status === "playing" && state.turn === myId;
+  const played = state.playedThisTurn?.[myId] ?? 0;
+  if(state.status === "waiting"){
+    document.getElementById("turnInfo").innerText = "Warte bis Lobby voll ist…";
+  } else if(state.status === "playing"){
+    document.getElementById("turnInfo").innerText = isMyTurn ? `DEIN ZUG • gespielt: ${played}/2` : `Jemand anderes ist dran`;
+  } else {
+    document.getElementById("turnInfo").innerText = "";
+  }
+
+  // EndTurn Button
+  const endBtn = document.getElementById("endTurnBtn");
+  endBtn.style.display = (isMyTurn && played >= 2) ? "inline-block" : "none";
+
+  // Overlay Win/Lose
+  if(state.status === "win" || state.status === "lose"){
     showOverlay(`
-      <h1>${game.status === "win" ? "🎉 You won!" : "💀 You lost!"}</h1>
+      <h2>${state.status === "win" ? "🎉 GEWONNEN" : "💀 VERLOREN"}</h2>
+      <p style="color:var(--muted); margin-top:0;">Rematch startet neue Partie, Stats bleiben.</p>
       <button onclick="rematch()">Rematch</button>
     `);
+    beep(state.status === "win" ? 660 : 200, 180);
   } else {
     hideOverlay();
   }
 
-  // Info
-  let info = "";
-  if(game.status === "waiting"){
-    info = `Warte auf Spieler: ${Object.keys(game.players).length}/${game.maxPlayers}`;
-  } else if(game.turn === myId){
-    info = `Dein Zug – Karten gespielt: ${game.playedThisTurn?.[myId] ?? 0}/2`;
-  } else {
-    info = "Warten auf Mitspieler";
-  }
-  document.getElementById("info").innerText = info;
-
-  // EndTurn Button
-  const played = game.playedThisTurn?.[myId] ?? 0;
-  document.getElementById("endTurn").style.display =
-    (game.turn === myId && played >= 2) ? "inline-block" : "none";
-
   // Piles
   const pilesDiv = document.getElementById("piles");
   pilesDiv.innerHTML = "";
-  for(const p in game.piles){
+  for(const p in state.piles){
+    const val = state.piles[p];
     const d = document.createElement("div");
     d.className = "pile";
-    d.innerText = `${p}\n${game.piles[p]}`;
+    d.innerHTML = `
+      <span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span>
+      <strong>${val}</strong>
+    `;
 
-    if(selectedCard !== null && isValid(selectedCard, p, game.piles[p])){
+    if(selectedCard !== null && isValid(selectedCard, p, val)){
       d.classList.add("valid");
     }
 
-    d.onclick = () => play(p);
+    d.onclick = ()=> tryPlay(p);
     pilesDiv.appendChild(d);
   }
 
-  // Hand
-  const hand = document.getElementById("hand");
-  hand.innerHTML = "";
-  (game.players?.[myId] || []).forEach(c=>{
+  renderHand();
+}
+
+function renderHand(){
+  const handDiv = document.getElementById("hand");
+  handDiv.innerHTML = "";
+  (myHand || []).forEach((c)=>{
     const el = document.createElement("div");
     el.className = "card" + (selectedCard === c ? " selected" : "");
     el.innerText = c;
-    el.onclick = () => { selectedCard = c; render(); };
-    hand.appendChild(el);
+    el.onclick = ()=>{
+      selectedCard = c;
+      beep(520, 40);
+      render(); // zeigt grüne Piles
+    };
+    handDiv.appendChild(el);
   });
 }
 
-function play(pile){
-  if(game?.status !== "playing") return;
-  if(game.turn !== myId) return;
-  if(selectedCard === null) return;
+function tryPlay(pile){
+  if(!state || state.status !== "playing") return;
+  if(state.turn !== myId) return toast("Nicht dein Zug.");
+
+  if(selectedCard === null) return toast("Erst eine Karte auswählen.");
+
+  // Client-seitig: nur visual, Server entscheidet final
+  const ok = isValid(selectedCard, pile, state.piles[pile]);
+  if(!ok) return toast("Dort nicht erlaubt.");
 
   socket.emit("play", { room, card: selectedCard, pile });
-  // ausgewählte Karte nach Versuch abwählen (Server entscheidet)
-  selectedCard = null;
+  beep(740, 55);
+  selectedCard = null; // nach Play abwählen
 }
 
 function endTurn(){
-  socket.emit("endTurn", room);
+  socket.emit("endTurn", { room });
+  beep(600, 70);
 }
 
 function rematch(){
-  socket.emit("rematch", room);
+  socket.emit("rematch", { room });
+  selectedCard = null;
+  beep(520, 70);
+}
+
+function sendPing(type){
+  if(!room) return toast("Erst Lobby beitreten.");
+  socket.emit("ping", { room, type });
+  beep(880, 60);
 }
 </script>
 </body>
