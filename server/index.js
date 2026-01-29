@@ -39,7 +39,11 @@ function isValid(card, pile, piles) {
 
 function anyLegalMoveForPlayer(game, pid) {
   const hand = game.players[pid]?.hand || [];
-  for (const c of hand) for (const p in game.piles) if (isValid(c, p, game.piles)) return true;
+  for (const c of hand) {
+    for (const p in game.piles) {
+      if (isValid(c, p, game.piles)) return true;
+    }
+  }
   return false;
 }
 
@@ -180,7 +184,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // LOSE (nur wenn niemand mehr kann)
+    // LOSE
     if (!anyLegalMoveForAnyone(g)) {
       g.status = "lose";
       g.stats.games += 1;
