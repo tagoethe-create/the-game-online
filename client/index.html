@@ -1,220 +1,123 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8" />
-<title>The Game – Online</title>
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-<style>
-body {
-  font-family: system-ui, sans-serif;
-  background: #121212;
-  color: #f2f2f2;
-  text-align: center;
-  margin: 0;
-  padding: 20px;
+const PORT = process.env.PORT || 3000;
+
+let games = {};
+
+function newGame(room) {
+  let deck = [];
+  for (let i = 2; i <= 99; i++) deck.push(i);
+  deck.sort(() => Math.random() - 0.5);
+
+  games[room] = {
+    deck,
+    piles: { up1: 1, up2: 1, down1: 100, down2: 100 },
+    players: {},
+    turn: null,
+    playedThisTurn: {},
+    status: "playing"
+  };
 }
 
-h1 { margin-bottom: 10px; }
-
-#join {
-  margin-bottom: 15px;
-}
-
-input, button {
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: none;
-}
-
-button {
-  background: #4caf50;
-  color: black;
-  cursor: pointer;
-}
-
-#topbar {
-  display: flex;
-  justify-content: center;
-  gap: 30px;
-  margin-bottom: 15px;
-}
-
-#game {
-  display: flex;
-  justify-content: center;
-  margin-top: 20px;
-}
-
-.piles {
-  display: grid;
-  grid-template-columns: repeat(2, 130px);
-  gap: 20px;
-}
-
-.pile {
-  background: #1e1e1e;
-  border: 2px solid #555;
-  border-radius: 14px;
-  padding: 15px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.pile span {
-  font-size: 14px;
-  opacity: 0.7;
-}
-
-.pile strong {
-  display: block;
-  font-size: 28px;
-  margin-top: 6px;
-}
-
-.pile.valid {
-  border-color: #4caf50;
-  box-shadow: 0 0 10px #4caf50;
-}
-
-#hand {
-  margin-top: 30px;
-}
-
-.card {
-  display: inline-block;
-  background: #2c2c2c;
-  padding: 12px 18px;
-  margin: 8px;
-  border-radius: 12px;
-  font-size: 18px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.card:hover {
-  transform: translateY(-6px);
-  background: #3a3a3a;
-}
-</style>
-</head>
-
-<body>
-
-<h1>The Game 🃏</h1>
-
-<div id="join">
-  <input id="room" placeholder="Lobby-Code" />
-  <button onclick="join()">Beitreten</button>
-</div>
-
-<div id="topbar">
-  <div id="deck"></div>
-  <div id="others"></div>
-</div>
-
-<div id="game">
-  <div class="piles" id="piles"></div>
-</div>
-
-<h2>Deine Karten</h2>
-<div id="hand"></div>
-
-<script>
-const SERVER_URL = "https://the-game-server-h9br.onrender.com";
-const socket = io(SERVER_URL);
-
-let room = "";
-let myId = "";
-let game = null;
-let selectedPile = null;
-let selectedCard = null;
-
-function join() {
-  room = document.getElementById("room").value;
-  socket.emit("join", room);
-}
-
-socket.on("joined", id => {
-  myId = id;
-});
-
-socket.on("state", g => {
-  game = g;
-  render();
-});
-
-function isValid(card, pileValue, pileName) {
-  if (pileName.startsWith("up")) {
-    return card > pileValue || card === pileValue - 10;
+function isValid(card, pile, piles) {
+  if (pile.startsWith("up")) {
+    return card > piles[pile] || card === piles[pile] - 10;
   } else {
-    return card < pileValue || card === pileValue + 10;
+    return card < piles[pile] || card === piles[pile] + 10;
   }
 }
 
-function render() {
-  if (!game) return;
+function canPlayAny(game) {
+  for (const pid in game.players) {
+    for (const card of game.players[pid]) {
+      for (const p in game.piles) {
+        if (isValid(card, p, game.piles)) return true;
+      }
+    }
+  }
+  return false;
+}
 
-  document.getElementById("deck").innerText =
-    "Nachziehstapel: " + game.deck.length;
+io.on("connection", socket => {
 
-  const others = Object.keys(game.players)
-    .filter(id => id !== myId).length;
+  socket.on("join", room => {
+    if (!games[room]) newGame(room);
+    const game = games[room];
 
-  document.getElementById("others").innerText =
-    "Mitspieler: " + others;
+    game.players[socket.id] = [];
+    game.playedThisTurn[socket.id] = 0;
 
-  const pilesDiv = document.getElementById("piles");
-  pilesDiv.innerHTML = "";
-
-  for (const p in game.piles) {
-    const el = document.createElement("div");
-    el.className = "pile";
-    el.innerHTML = `
-      <span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span>
-      <strong>${game.piles[p]}</strong>
-    `;
-
-    if (
-      selectedCard !== null &&
-      isValid(selectedCard, game.piles[p], p)
-    ) {
-      el.classList.add("valid");
+    while (game.players[socket.id].length < 6 && game.deck.length) {
+      game.players[socket.id].push(game.deck.pop());
     }
 
-    el.onclick = () => selectedPile = p;
-    pilesDiv.appendChild(el);
-  }
+    if (!game.turn) game.turn = socket.id;
 
-  const handDiv = document.getElementById("hand");
-  handDiv.innerHTML = "";
-
-  (game.players[myId] || []).forEach(card => {
-    const c = document.createElement("div");
-    c.className = "card";
-    c.innerText = card;
-    c.onclick = () => selectCard(card);
-    handDiv.appendChild(c);
-  });
-}
-
-function selectCard(card) {
-  selectedCard = card;
-  render();
-
-  if (!selectedPile) return;
-
-  socket.emit("play", {
-    room,
-    card,
-    pile: selectedPile
+    socket.join(room);
+    io.to(room).emit("state", game);
   });
 
-  selectedCard = null;
-  selectedPile = null;
-}
-</script>
+  socket.on("play", ({ room, card, pile }) => {
+    const game = games[room];
+    if (!game || game.status !== "playing") return;
+    if (game.turn !== socket.id) return;
 
-</body>
-</html>
+    const hand = game.players[socket.id];
+    if (!hand.includes(card)) return;
+    if (!isValid(card, pile, game.piles)) return;
+
+    game.piles[pile] = card;
+    game.players[socket.id] = hand.filter(c => c !== card);
+    game.playedThisTurn[socket.id]++;
+
+    while (game.players[socket.id].length < 6 && game.deck.length) {
+      game.players[socket.id].push(game.deck.pop());
+    }
+
+    io.to(room).emit("state", game);
+  });
+
+  socket.on("endTurn", room => {
+    const game = games[room];
+    if (!game) return;
+
+    if (game.playedThisTurn[socket.id] < 2) return;
+
+    game.playedThisTurn[socket.id] = 0;
+    const ids = Object.keys(game.players);
+    const idx = ids.indexOf(socket.id);
+    game.turn = ids[(idx + 1) % ids.length];
+
+    if (
+      game.deck.length === 0 &&
+      ids.every(id => game.players[id].length === 0)
+    ) {
+      game.status = "win";
+    } else if (!canPlayAny(game)) {
+      game.status = "lose";
+    }
+
+    io.to(room).emit("state", game);
+  });
+
+  socket.on("rematch", room => {
+    newGame(room);
+    io.to(room).emit("state", games[room]);
+  });
+
+  socket.on("disconnect", () => {
+    for (const room in games) {
+      delete games[room].players[socket.id];
+    }
+  });
+});
+
+server.listen(PORT, () =>
+  console.log("Server läuft auf Port", PORT)
+);
