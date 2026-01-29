@@ -1,123 +1,163 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>The Game – Online</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
-
-const PORT = process.env.PORT || 3000;
-
-let games = {};
-
-function newGame(room) {
-  let deck = [];
-  for (let i = 2; i <= 99; i++) deck.push(i);
-  deck.sort(() => Math.random() - 0.5);
-
-  games[room] = {
-    deck,
-    piles: { up1: 1, up2: 1, down1: 100, down2: 100 },
-    players: {},
-    turn: null,
-    playedThisTurn: {},
-    status: "playing"
-  };
+<style>
+body {
+  background: #121212;
+  color: #f2f2f2;
+  font-family: system-ui;
+  text-align: center;
+  padding: 20px;
 }
 
-function isValid(card, pile, piles) {
-  if (pile.startsWith("up")) {
-    return card > piles[pile] || card === piles[pile] - 10;
-  } else {
-    return card < piles[pile] || card === piles[pile] + 10;
-  }
+.piles {
+  display: grid;
+  grid-template-columns: repeat(2, 140px);
+  gap: 20px;
+  justify-content: center;
 }
 
-function canPlayAny(game) {
-  for (const pid in game.players) {
-    for (const card of game.players[pid]) {
-      for (const p in game.piles) {
-        if (isValid(card, p, game.piles)) return true;
-      }
-    }
-  }
-  return false;
+.pile {
+  background: #1e1e1e;
+  border: 2px solid #555;
+  border-radius: 14px;
+  padding: 15px;
+  cursor: pointer;
 }
 
-io.on("connection", socket => {
+.pile.valid {
+  border-color: #4caf50;
+  box-shadow: 0 0 10px #4caf50;
+}
 
-  socket.on("join", room => {
-    if (!games[room]) newGame(room);
-    const game = games[room];
+.card {
+  background: #2c2c2c;
+  display: inline-block;
+  padding: 12px 18px;
+  margin: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+}
 
-    game.players[socket.id] = [];
-    game.playedThisTurn[socket.id] = 0;
+button {
+  padding: 10px 16px;
+  margin-top: 15px;
+  border-radius: 8px;
+  border: none;
+  background: #4caf50;
+  cursor: pointer;
+}
+</style>
+</head>
 
-    while (game.players[socket.id].length < 6 && game.deck.length) {
-      game.players[socket.id].push(game.deck.pop());
-    }
+<body>
 
-    if (!game.turn) game.turn = socket.id;
+<h1>The Game 🃏</h1>
 
-    socket.join(room);
-    io.to(room).emit("state", game);
-  });
+<input id="room" placeholder="Lobby-Code">
+<button onclick="join()">Beitreten</button>
 
-  socket.on("play", ({ room, card, pile }) => {
-    const game = games[room];
-    if (!game || game.status !== "playing") return;
-    if (game.turn !== socket.id) return;
+<h3 id="info"></h3>
 
-    const hand = game.players[socket.id];
-    if (!hand.includes(card)) return;
-    if (!isValid(card, pile, game.piles)) return;
+<div class="piles" id="piles"></div>
 
-    game.piles[pile] = card;
-    game.players[socket.id] = hand.filter(c => c !== card);
-    game.playedThisTurn[socket.id]++;
+<h2>Deine Karten</h2>
+<div id="hand"></div>
 
-    while (game.players[socket.id].length < 6 && game.deck.length) {
-      game.players[socket.id].push(game.deck.pop());
-    }
+<button id="endTurn" onclick="endTurn()" style="display:none">
+Zug beenden
+</button>
 
-    io.to(room).emit("state", game);
-  });
+<div id="overlay"></div>
 
-  socket.on("endTurn", room => {
-    const game = games[room];
-    if (!game) return;
+<script>
+const socket = io("https://the-game-server-h9br.onrender.com");
 
-    if (game.playedThisTurn[socket.id] < 2) return;
+let room="", myId="", game=null, selectedCard=null;
 
-    game.playedThisTurn[socket.id] = 0;
-    const ids = Object.keys(game.players);
-    const idx = ids.indexOf(socket.id);
-    game.turn = ids[(idx + 1) % ids.length];
+function join(){
+  room=document.getElementById("room").value;
+  socket.emit("join", room);
+}
 
-    if (
-      game.deck.length === 0 &&
-      ids.every(id => game.players[id].length === 0)
-    ) {
-      game.status = "win";
-    } else if (!canPlayAny(game)) {
-      game.status = "lose";
-    }
-
-    io.to(room).emit("state", game);
-  });
-
-  socket.on("rematch", room => {
-    newGame(room);
-    io.to(room).emit("state", games[room]);
-  });
-
-  socket.on("disconnect", () => {
-    for (const room in games) {
-      delete games[room].players[socket.id];
-    }
-  });
+socket.on("state", g=>{
+  game=g;
+  myId ??= socket.id;
+  render();
 });
 
-server.listen(PORT, () =>
-  console.log("Server läuft auf Port", PORT)
-);
+function isValid(card,pile,val){
+  return pile.startsWith("up")
+    ? card>val || card===val-10
+    : card<val || card===val+10;
+}
+
+function render(){
+  if(!game) return;
+
+  if(game.status!=="playing"){
+    document.getElementById("overlay").innerHTML=
+      `<h1>${game.status==="win"?"🎉 GEWONNEN":"💀 VERLOREN"}</h1>
+       <button onclick="rematch()">Rematch</button>`;
+    return;
+  }
+
+  document.getElementById("info").innerText =
+    game.turn===myId
+    ? `Dein Zug – Karten gespielt: ${game.playedThisTurn[myId]}/2`
+    : `Warten auf Mitspieler`;
+
+  document.getElementById("endTurn").style.display =
+    game.turn===myId && game.playedThisTurn[myId]>=2
+    ? "inline-block" : "none";
+
+  const piles=document.getElementById("piles");
+  piles.innerHTML="";
+
+  for(const p in game.piles){
+    const d=document.createElement("div");
+    d.className="pile";
+    d.innerText=`${p}\n${game.piles[p]}`;
+
+    if(
+      selectedCard &&
+      isValid(selectedCard,p,game.piles[p])
+    ) d.classList.add("valid");
+
+    d.onclick=()=>play(p);
+    piles.appendChild(d);
+  }
+
+  const hand=document.getElementById("hand");
+  hand.innerHTML="";
+  game.players[myId]?.forEach(c=>{
+    const el=document.createElement("div");
+    el.className="card";
+    el.innerText=c;
+    el.onclick=()=>{selectedCard=c;render();}
+    hand.appendChild(el);
+  });
+}
+
+function play(pile){
+  if(!selectedCard) return;
+  socket.emit("play",{room,card:selectedCard,pile});
+  selectedCard=null;
+}
+
+function endTurn(){
+  socket.emit("endTurn",room);
+}
+
+function rematch(){
+  socket.emit("rematch",room);
+  document.getElementById("overlay").innerHTML="";
+}
+</script>
+
+</body>
+</html>
