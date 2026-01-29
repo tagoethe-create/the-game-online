@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 let games = {};
 
-function newGame(room) {
+function newGame(room, maxPlayers) {
   let deck = [];
   for (let i = 2; i <= 99; i++) deck.push(i);
   deck.sort(() => Math.random() - 0.5);
@@ -19,18 +19,16 @@ function newGame(room) {
     deck,
     piles: { up1: 1, up2: 1, down1: 100, down2: 100 },
     players: {},
-    turn: null,
     playedThisTurn: {},
-    status: "playing"
+    status: "waiting",
+    maxPlayers: maxPlayers || 2,
+    turn: null
   };
 }
 
 function isValid(card, pile, piles) {
-  if (pile.startsWith("up")) {
-    return card > piles[pile] || card === piles[pile] - 10;
-  } else {
-    return card < piles[pile] || card === piles[pile] + 10;
-  }
+  if (pile.startsWith("up")) return card > piles[pile] || card === piles[pile] - 10;
+  else return card < piles[pile] || card === piles[pile] + 10;
 }
 
 function canPlayAny(game) {
@@ -46,20 +44,36 @@ function canPlayAny(game) {
 
 io.on("connection", socket => {
 
+  socket.on("create", ({room, maxPlayers}) => {
+    if (!games[room]) newGame(room, maxPlayers);
+    socket.join(room);
+    io.to(room).emit("state", games[room]);
+  });
+
   socket.on("join", room => {
-    if (!games[room]) newGame(room);
     const game = games[room];
+    if (!game) return;
+
+    if (Object.keys(game.players).length >= game.maxPlayers) {
+      socket.emit("error", "Lobby voll");
+      return;
+    }
 
     game.players[socket.id] = [];
     game.playedThisTurn[socket.id] = 0;
+    socket.join(room);
 
+    // Karten austeilen
     while (game.players[socket.id].length < 6 && game.deck.length) {
       game.players[socket.id].push(game.deck.pop());
     }
 
-    if (!game.turn) game.turn = socket.id;
+    // Start erst wenn alle da
+    if (Object.keys(game.players).length === game.maxPlayers) {
+      game.status = "playing";
+      game.turn = Object.keys(game.players)[0];
+    }
 
-    socket.join(room);
     io.to(room).emit("state", game);
   });
 
@@ -85,7 +99,7 @@ io.on("connection", socket => {
 
   socket.on("endTurn", room => {
     const game = games[room];
-    if (!game) return;
+    if (!game || game.status !== "playing") return;
 
     if (game.playedThisTurn[socket.id] < 2) return;
 
@@ -97,17 +111,15 @@ io.on("connection", socket => {
     if (
       game.deck.length === 0 &&
       ids.every(id => game.players[id].length === 0)
-    ) {
-      game.status = "win";
-    } else if (!canPlayAny(game)) {
-      game.status = "lose";
-    }
+    ) game.status = "win";
+    else if (!canPlayAny(game)) game.status = "lose";
 
     io.to(room).emit("state", game);
   });
 
   socket.on("rematch", room => {
-    newGame(room);
+    const game = games[room];
+    newGame(room, game?.maxPlayers || 2);
     io.to(room).emit("state", games[room]);
   });
 
@@ -118,6 +130,4 @@ io.on("connection", socket => {
   });
 });
 
-server.listen(PORT, () =>
-  console.log("Server läuft auf Port", PORT)
-);
+server.listen(PORT, ()=> console.log("Server läuft auf Port", PORT));
