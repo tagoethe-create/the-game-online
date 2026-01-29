@@ -44,7 +44,7 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   color:var(--muted);
 }
 
-/* ✅ Turn Ring wrapper */
+/* Turn Ring wrapper */
 #turnInfoWrap{
   display:flex;
   align-items:center;
@@ -52,7 +52,7 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   justify-content:center;
 }
 
-/* ✅ Turn-Ring (ruhig rotierend, kein Countdown) */
+/* Turn-Ring */
 .turnRing{
   width:18px;
   height:18px;
@@ -61,13 +61,8 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   border-top-color: rgba(242,242,242,.95);
   opacity:.9;
 }
-.turnRing.spinning{
-  animation: turnSpin 1.15s linear infinite;
-}
-@keyframes turnSpin{
-  from{ transform: rotate(0deg); }
-  to{ transform: rotate(360deg); }
-}
+.turnRing.spinning{ animation: turnSpin 1.15s linear infinite; }
+@keyframes turnSpin{ from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
 
 #pingbar{
   display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
@@ -178,7 +173,7 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
 }
 #overlay h2{ margin:6px 0 10px; }
 
-/* ✅ Flying card (Animation) */
+/* ✅ Flying card (iPad-safe) */
 .flyingCard{
   position:fixed;
   z-index:10000;
@@ -189,9 +184,10 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   border-radius:16px;
   font-size:18px;
   min-width:56px;
-  box-shadow:0 10px 28px rgba(0,0,0,.55);
-  transform: translate(-50%, -50%);
+  box-shadow:0 12px 34px rgba(0,0,0,.6);
+  transform: translate3d(-50%, -50%, 0);
   will-change: transform, opacity;
+  backface-visibility:hidden;
 }
 
 /* ✨ Spark Effekt für ±10 Moves */
@@ -202,11 +198,11 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   border-radius:50%;
   pointer-events:none;
   opacity:0.9;
-  animation:sparkFly 2000ms ease-out forwards;
+  animation:sparkFly 520ms ease-out forwards;
 }
 @keyframes sparkFly{
-  0%{ transform: translate(0,0) scale(1); opacity:1; }
-  100%{ transform: translate(var(--dx), var(--dy)) scale(0.4); opacity:0; }
+  0%{ transform: translate3d(0,0,0) scale(1); opacity:1; }
+  100%{ transform: translate3d(var(--dx), var(--dy), 0) scale(0.4); opacity:0; }
 }
 
 @media (max-width:420px){
@@ -262,11 +258,11 @@ const socket = io(SERVER_URL);
 
 let room="", myId="", state=null, myHand=[], selectedCard=null;
 let audioCtx=null;
-let armedPing = null; // "have" | "dont"
-const pileEls = {};   // pileName -> DOM element
-const cardEls = new Map(); // cardValue -> DOM element (last rendered)
+let armedPing = null;
+const pileEls = {};
+const cardEls = new Map();
 
-/* ✅ Persist Lobby + Name (Reload-friendly) */
+/* Persist Lobby + Name */
 const LS_ROOM = "thegame_room";
 const LS_NAME = "thegame_name";
 function saveInputs(){
@@ -330,17 +326,8 @@ function join(){
 }
 
 socket.on("errorMsg", (msg)=> alert(msg));
-
-socket.on("state", (s)=>{
-  state=s;
-  myId=socket.id;
-  render();
-});
-
-socket.on("hand", (hand)=>{
-  myHand=hand||[];
-  renderHand();
-});
+socket.on("state", (s)=>{ state=s; myId=socket.id; render(); });
+socket.on("hand", (hand)=>{ myHand=hand||[]; renderHand(); });
 
 function isValid(card, pileName, pileValue){
   return pileName.startsWith("up")
@@ -376,7 +363,7 @@ function hideOverlay(){
 let lastEndSound=null;
 let lastPassHint=false;
 
-/* ---- Ping chips: Drag (Desktop) + Tap-to-arm (Mobile) ---- */
+/* Ping chips */
 function setArmedPing(typeOrNull){
   armedPing = typeOrNull;
   document.getElementById("chipHave").classList.toggle("armed", armedPing==="have");
@@ -386,13 +373,11 @@ function setArmedPing(typeOrNull){
 ["chipHave","chipDont"].forEach(id=>{
   const el = document.getElementById(id);
 
-  // Drag
   el.addEventListener("dragstart", (e)=>{
     e.dataTransfer.setData("pingType", el.dataset.type);
     try { e.dataTransfer.effectAllowed = "copy"; } catch {}
   });
 
-  // Tap (mobile fallback)
   el.addEventListener("click", ()=>{
     const t = el.dataset.type;
     setArmedPing(armedPing===t ? null : t);
@@ -407,7 +392,7 @@ function sendPilePing(pile, type){
   beep(type==="dont" ? 240 : 860, 70);
 }
 
-/* ✅ Card animation */
+/* ✅ iPad-safe 2s card animation (transform-only) */
 function animateCardToPile(cardValue, pileName){
   const fromEl = cardEls.get(cardValue);
   const toEl = pileEls[pileName];
@@ -421,6 +406,9 @@ function animateCardToPile(cardValue, pileName){
   const endX   = tr.left + tr.width/2;
   const endY   = tr.top + tr.height/2;
 
+  const dx = endX - startX;
+  const dy = endY - startY;
+
   const fly = document.createElement("div");
   fly.className = "flyingCard";
   fly.textContent = cardValue;
@@ -428,26 +416,27 @@ function animateCardToPile(cardValue, pileName){
   fly.style.top  = startY + "px";
   document.body.appendChild(fly);
 
-  // Richtung: up -> leicht nach oben bogen, down -> leicht nach unten bogen
   const dir = pileName.startsWith("up") ? -1 : 1;
-  const midX = (startX + endX) / 2;
-  const midY = (startY + endY) / 2 + dir * 80;
+  const arc = 140 * dir;        // stärkerer Bogen = sichtbarer
+  const wobble = (Math.random() * 40) - 20; // kleine Seitabweichung
 
-  const anim = fly.animate([
-    { transform: `translate(-50%, -50%) scale(1)`, opacity: 1, offset: 0, left: startX+"px", top: startY+"px" },
-    { transform: `translate(-50%, -50%) scale(1.06)`, opacity: 1, offset: 0.55, left: midX+"px", top: midY+"px" },
-    { transform: `translate(-50%, -50%) scale(0.96)`, opacity: 0.92, offset: 1, left: endX+"px", top: endY+"px" }
-  ], {
-    duration: 420,
+  const keyframes = [
+    { transform: `translate3d(-50%, -50%, 0) scale(1)`, opacity: 1 },
+    { transform: `translate3d(calc(-50% + ${dx*0.55 + wobble}px), calc(-50% + ${dy*0.55 + arc}px), 0) scale(1.08)`, opacity: 1 },
+    { transform: `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(0.98)`, opacity: 0.96 }
+  ];
+
+  const anim = fly.animate(keyframes, {
+    duration: 2000, // ✅ ~2 Sekunden
     easing: "cubic-bezier(.2,.9,.2,1)"
   });
 
   anim.onfinish = () => fly.remove();
 }
 
-/* ✨ Spark Effekt */
+/* Spark */
 function spawnSpark(pileEl, color){
-  const count = 4 + Math.floor(Math.random()*2); // 4–5 sparks
+  const count = 5 + Math.floor(Math.random()*2); // 5–6 sparks
   const rect = pileEl.getBoundingClientRect();
   const cx = rect.width / 2;
   const cy = rect.height / 2;
@@ -458,7 +447,7 @@ function spawnSpark(pileEl, color){
     s.style.background = color;
 
     const angle = Math.random() * Math.PI * 2;
-    const dist = 22 + Math.random() * 14;
+    const dist = 26 + Math.random() * 18;
 
     s.style.setProperty("--dx", `${Math.cos(angle)*dist}px`);
     s.style.setProperty("--dy", `${Math.sin(angle)*dist}px`);
@@ -467,7 +456,7 @@ function spawnSpark(pileEl, color){
     s.style.top  = cy + "px";
 
     pileEl.appendChild(s);
-    setTimeout(()=>s.remove(), 450);
+    setTimeout(()=>s.remove(), 600);
   }
 }
 
@@ -483,7 +472,6 @@ function render(){
   const played = state.playedThisTurn?.[myId] ?? 0;
   const minPlays = minPlaysThisTurn();
 
-  // ✅ Turn ring
   const ring = document.getElementById("turnRing");
   if(state.status==="waiting"){
     document.getElementById("turnInfo").innerText=`Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
@@ -498,7 +486,6 @@ function render(){
     ring.classList.remove("spinning");
   }
 
-  // EndTurn Button: (>=minPlays) oder PASS wenn keine legalen Züge
   const endBtn=document.getElementById("endTurnBtn");
   const canPass = isMyTurn && !hasAnyLegalMove();
   endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
@@ -525,7 +512,6 @@ function render(){
     lastEndSound = null;
   }
 
-  // Piles
   const pilesDiv=document.getElementById("piles");
   pilesDiv.innerHTML="";
   for(const p in state.piles){
@@ -533,7 +519,6 @@ function render(){
     const d=document.createElement("div");
     d.className="pile";
     d.innerHTML=`<span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span><strong>${val}</strong>`;
-
     pileEls[p] = d;
 
     if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
@@ -546,7 +531,6 @@ function render(){
       d.appendChild(badge);
     }
 
-    // Drag target (desktop)
     d.addEventListener("dragover", (e)=> e.preventDefault());
     d.addEventListener("drop", (e)=>{
       e.preventDefault();
@@ -554,7 +538,6 @@ function render(){
       if(type==="have" || type==="dont") sendPilePing(p, type);
     });
 
-    // Tap target (mobile fallback)
     d.onclick=()=>{
       if(armedPing){
         sendPilePing(p, armedPing);
@@ -580,9 +563,7 @@ function renderHand(){
     const el=document.createElement("div");
     el.className="card" + (selectedCard===c ? " selected" : "");
     el.innerText=c;
-
     cardEls.set(c, el);
-
     el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
     handDiv.appendChild(el);
   });
@@ -597,10 +578,10 @@ function tryPlay(pile){
   const ok=isValid(selectedCard, pile, prevVal);
   if(!ok) return toast("Dort nicht erlaubt.");
 
-  // ✅ Animation
+  // Flug-Animation (2s)
   animateCardToPile(selectedCard, pile);
 
-  // ✨ Spark nur bei Special-Move
+  // Spark nur bei Special-Move
   const diff = selectedCard - prevVal;
   const isUp = pile.startsWith("up");
   const isDown = pile.startsWith("down");
@@ -610,10 +591,12 @@ function tryPlay(pile){
     const color = isUp ? "#4caf50" : "#ff9800";
     const pileEl = pileEls[pile];
     if(pileEl) spawnSpark(pileEl, color);
+    beep(980, 80); // kleiner „tink“ für Special (optional)
+  } else {
+    beep(740,55);
   }
 
   socket.emit("play", { room, card:selectedCard, pile });
-  beep(740,55);
   selectedCard=null;
 }
 
