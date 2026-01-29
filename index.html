@@ -190,19 +190,17 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   backface-visibility:hidden;
 }
 
-/* ✨ Spark Effekt für ±10 Moves */
+/* ✨ Spark Effekt (iPad-sichtbar) */
 .spark{
   position:absolute;
-  width:6px;
-  height:6px;
-  border-radius:50%;
+  width:12px;
+  height:12px;
+  border-radius:999px;
   pointer-events:none;
-  opacity:0.9;
-  animation:sparkFly 520ms ease-out forwards;
-}
-@keyframes sparkFly{
-  0%{ transform: translate3d(0,0,0) scale(1); opacity:1; }
-  100%{ transform: translate3d(var(--dx), var(--dy), 0) scale(0.4); opacity:0; }
+  opacity:1;
+  filter: drop-shadow(0 0 10px rgba(255, 200, 0, .9));
+  box-shadow: 0 0 14px rgba(255, 200, 0, .85);
+  will-change: transform, opacity;
 }
 
 @media (max-width:420px){
@@ -417,26 +415,26 @@ function animateCardToPile(cardValue, pileName){
   document.body.appendChild(fly);
 
   const dir = pileName.startsWith("up") ? -1 : 1;
-  const arc = 140 * dir;        // stärkerer Bogen = sichtbarer
-  const wobble = (Math.random() * 40) - 20; // kleine Seitabweichung
+  const arc = 140 * dir;
+  const wobble = (Math.random() * 40) - 20;
 
   const keyframes = [
     { transform: `translate3d(-50%, -50%, 0) scale(1)`, opacity: 1 },
-    { transform: `translate3d(calc(-50% + ${dx*0.55 + wobble}px), calc(-50% + ${dy*0.55 + arc}px), 0) scale(1.08)`, opacity: 1 },
-    { transform: `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(0.98)`, opacity: 0.96 }
+    { transform: `translate3d(calc(-50% + ${dx*0.55 + wobble}px), calc(-50% + ${dy*0.55 + arc}px), 0) scale(1.10)`, opacity: 1 },
+    { transform: `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(0.98)`, opacity: 0.98 }
   ];
 
   const anim = fly.animate(keyframes, {
-    duration: 2000, // ✅ ~2 Sekunden
+    duration: 2000,
     easing: "cubic-bezier(.2,.9,.2,1)"
   });
 
   anim.onfinish = () => fly.remove();
 }
 
-/* Spark */
+/* ✨ iPad-sichere Sparks (Web Animations) */
 function spawnSpark(pileEl, color){
-  const count = 5 + Math.floor(Math.random()*2); // 5–6 sparks
+  const count = 10; // viele Funken
   const rect = pileEl.getBoundingClientRect();
   const cx = rect.width / 2;
   const cy = rect.height / 2;
@@ -445,18 +443,30 @@ function spawnSpark(pileEl, color){
     const s = document.createElement("div");
     s.className = "spark";
     s.style.background = color;
-
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 26 + Math.random() * 18;
-
-    s.style.setProperty("--dx", `${Math.cos(angle)*dist}px`);
-    s.style.setProperty("--dy", `${Math.sin(angle)*dist}px`);
+    s.style.filter = `drop-shadow(0 0 10px ${color}CC)`;
+    s.style.boxShadow = `0 0 14px ${color}BB`;
 
     s.style.left = cx + "px";
     s.style.top  = cy + "px";
+    s.style.marginLeft = "-6px";
+    s.style.marginTop  = "-6px";
 
     pileEl.appendChild(s);
-    setTimeout(()=>s.remove(), 600);
+
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = 40 + Math.random() * 35;
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+
+    const anim = s.animate([
+      { transform: "translate3d(0,0,0) scale(1)", opacity: 1 },
+      { transform: `translate3d(${dx}px, ${dy}px, 0) scale(0.15)`, opacity: 0 }
+    ], {
+      duration: 900,
+      easing: "cubic-bezier(.2,.9,.2,1)"
+    });
+
+    anim.onfinish = () => s.remove();
   }
 }
 
@@ -519,6 +529,7 @@ function render(){
     const d=document.createElement("div");
     d.className="pile";
     d.innerHTML=`<span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span><strong>${val}</strong>`;
+
     pileEls[p] = d;
 
     if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
@@ -578,20 +589,20 @@ function tryPlay(pile){
   const ok=isValid(selectedCard, pile, prevVal);
   if(!ok) return toast("Dort nicht erlaubt.");
 
-  // Flug-Animation (2s)
+  // Fluganimation
   animateCardToPile(selectedCard, pile);
 
-  // Spark nur bei Special-Move
+  // Spark nur bei Special-Move (−10 up / +10 down)
   const diff = selectedCard - prevVal;
   const isUp = pile.startsWith("up");
   const isDown = pile.startsWith("down");
   const isSpecial = (isUp && diff === -10) || (isDown && diff === 10);
 
   if(isSpecial){
-    const color = isUp ? "#4caf50" : "#ff9800";
+    const color = isUp ? "#7CFF6B" : "#FFD166";
     const pileEl = pileEls[pile];
     if(pileEl) spawnSpark(pileEl, color);
-    beep(980, 80); // kleiner „tink“ für Special (optional)
+    beep(980, 90);
   } else {
     beep(740,55);
   }
