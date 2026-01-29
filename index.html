@@ -1,254 +1,569 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>The Game – Online</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
-
-const PORT = process.env.PORT || 3000;
-let games = {};
-
-function makeDeck() {
-  const deck = [];
-  for (let i = 2; i <= 99; i++) deck.push(i);
-  deck.sort(() => Math.random() - 0.5);
-  return deck;
+<style>
+:root{
+  --bg:#121212; --panel:#1e1e1e; --card:#2c2c2c;
+  --accent:#4caf50; --danger:#ff5252;
+  --text:#f2f2f2; --muted:#a0a0a0;
 }
 
-function newRoom(room, maxPlayers) {
-  games[room] = {
-    deck: makeDeck(),
-    piles: { up1: 1, up2: 1, down1: 100, down2: 100 },
-    players: {},            // socketId -> { name, hand: [] }
-    playedThisTurn: {},     // socketId -> number
-    turn: null,
-    status: "waiting",      // waiting | playing | win | lose
-    maxPlayers: Math.max(2, Math.min(4, Number(maxPlayers) || 2)),
-    handSize: 6,
-    stats: { games: 0, wins: 0, losses: 0 },
-    pilePings: {}           // pile -> { type, from, ts }
-  };
+body{
+  margin:0; padding:16px;
+  background:var(--bg); color:var(--text);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  text-align:center;
 }
 
-function isValid(card, pile, piles) {
-  const top = piles[pile];
-  if (pile.startsWith("up")) return card > top || card === top - 10;
-  return card < top || card === top + 10;
+h1{ margin:8px 0 12px; }
+
+#controls{
+  display:flex; flex-wrap:wrap; justify-content:center;
+  gap:10px; margin-bottom:10px;
 }
 
-function anyLegalMoveForPlayer(game, pid) {
-  const hand = game.players[pid]?.hand || [];
-  for (const c of hand) for (const p in game.piles) if (isValid(c, p, game.piles)) return true;
+input, button{
+  font-size:16px;
+  padding:12px 14px;
+  border-radius:12px;
+  border:none;
+}
+
+input{ min-width:170px; }
+button{ background:var(--accent); color:#0b0b0b; cursor:pointer; min-height:44px; }
+button.secondary{ background:#2b2b2b; color:var(--text); }
+
+#topbar{
+  display:flex; flex-wrap:wrap; justify-content:center;
+  gap:10px; margin:10px 0 6px;
+  color:var(--muted);
+}
+
+/* ✅ Turn Ring wrapper */
+#turnInfoWrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  justify-content:center;
+}
+
+/* ✅ Turn-Ring (ruhig rotierend, kein Countdown) */
+.turnRing{
+  width:18px;
+  height:18px;
+  border-radius:999px;
+  border:2px solid rgba(160,160,160,.35);
+  border-top-color: rgba(242,242,242,.95);
+  opacity:.9;
+}
+.turnRing.spinning{
+  animation: turnSpin 1.15s linear infinite;
+}
+@keyframes turnSpin{
+  from{ transform: rotate(0deg); }
+  to{ transform: rotate(360deg); }
+}
+
+#pingbar{
+  display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
+  margin:10px 0 6px;
+}
+.pingchip{
+  background:#2b2b2b; color:var(--text);
+  padding:12px 14px; border-radius:14px;
+  cursor:grab; user-select:none;
+  border:1px solid #3a3a3a;
+  min-height:44px; display:flex; align-items:center; gap:8px;
+}
+.pingchip:active{ cursor:grabbing; transform:scale(0.99); }
+.pingchip.armed{
+  outline:2px solid var(--accent);
+  box-shadow:0 0 10px rgba(76,175,80,.6);
+}
+
+.piles{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(140px, 170px));
+  gap:14px;
+  justify-content:center;
+  margin:14px 0;
+}
+
+.pile{
+  background:var(--panel);
+  border:2px solid #555;
+  border-radius:16px;
+  padding:14px 10px;
+  user-select:none;
+  min-height:86px;
+  display:flex; flex-direction:column; justify-content:center;
+  cursor:pointer;
+  position:relative;
+}
+
+.pile strong{ font-size:28px; margin-top:4px; display:block; }
+.pile span{ font-size:13px; color:var(--muted); }
+
+.pile.valid{
+  border-color:var(--accent);
+  box-shadow:0 0 10px rgba(76,175,80,.7);
+}
+
+.pile .pilePing{
+  position:absolute;
+  top:-12px; right:-12px;
+  font-size:26px;
+  filter:drop-shadow(0 0 6px rgba(0,0,0,.5));
+}
+.pile .pilePing.have{ color:var(--accent); }
+.pile .pilePing.dont{ color:var(--danger); }
+
+#hand{ margin-top:10px; }
+.card{
+  display:inline-block;
+  background:var(--card);
+  padding:14px 18px;
+  margin:8px;
+  border-radius:16px;
+  font-size:18px;
+  min-width:56px;
+  user-select:none;
+  cursor:pointer;
+  position:relative;
+  transition: transform .12s ease;
+}
+.card:active{ transform: scale(0.98); }
+.card.selected{
+  outline:2px solid var(--accent);
+  box-shadow:0 0 10px rgba(76,175,80,.7);
+}
+
+#actions{
+  display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
+  margin-top:10px;
+}
+#endTurnBtn{ display:none; }
+
+#toast{
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:18px;
+  background:#000c; color:var(--text);
+  padding:10px 14px;
+  border-radius:14px;
+  display:none;
+  z-index:9999;
+  max-width:min(520px, 92vw);
+}
+
+#overlay{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.72);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9998;
+  padding:18px;
+}
+#overlay .box{
+  width:min(520px, 92vw);
+  background:var(--panel);
+  border:2px solid #555;
+  border-radius:18px;
+  padding:16px;
+}
+#overlay h2{ margin:6px 0 10px; }
+
+/* ✅ Flying card (Animation) */
+.flyingCard{
+  position:fixed;
+  z-index:10000;
+  pointer-events:none;
+  background:var(--card);
+  color:var(--text);
+  padding:14px 18px;
+  border-radius:16px;
+  font-size:18px;
+  min-width:56px;
+  box-shadow:0 10px 28px rgba(0,0,0,.55);
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+@media (max-width:420px){
+  input{ min-width:150px; }
+  .piles{ grid-template-columns:repeat(2, minmax(140px, 1fr)); }
+}
+</style>
+</head>
+
+<body>
+<h1>The Game 🃏</h1>
+
+<div id="controls">
+  <input id="room" placeholder="Lobby-Code">
+  <input id="name" placeholder="Name (optional)">
+  <input id="maxPlayers" type="number" min="2" max="4" value="2" style="width:90px" title="2–4 Spieler">
+  <button onclick="create()">Lobby erstellen</button>
+  <button class="secondary" onclick="join()">Beitreten</button>
+</div>
+
+<div id="topbar">
+  <div id="lobbyInfo"></div>
+  <div id="deckInfo"></div>
+
+  <div id="turnInfoWrap">
+    <div id="turnRing" class="turnRing" aria-hidden="true"></div>
+    <div id="turnInfo"></div>
+  </div>
+
+  <div id="statsInfo"></div>
+</div>
+
+<div id="pingbar">
+  <div id="chipHave" class="pingchip" draggable="true" data-type="have">👀 <span>Ich hab was</span></div>
+  <div id="chipDont" class="pingchip" draggable="true" data-type="dont">🚫 <span>Bitte nicht</span></div>
+</div>
+
+<div class="piles" id="piles"></div>
+
+<h2>Deine Karten</h2>
+<div id="hand"></div>
+
+<div id="actions">
+  <button id="endTurnBtn" onclick="endTurn()">Zug beenden</button>
+</div>
+
+<div id="overlay"></div>
+<div id="toast"></div>
+
+<script>
+const SERVER_URL = "https://the-game-server-h9br.onrender.com";
+const socket = io(SERVER_URL);
+
+let room="", myId="", state=null, myHand=[], selectedCard=null;
+let audioCtx=null;
+let armedPing = null;
+const pileEls = {};
+const cardEls = new Map();
+
+/* ✅ Persist Lobby + Name (Reload-friendly) */
+const LS_ROOM = "thegame_room";
+const LS_NAME = "thegame_name";
+function saveInputs(){
+  try{
+    localStorage.setItem(LS_ROOM, document.getElementById("room").value.trim());
+    localStorage.setItem(LS_NAME, document.getElementById("name").value.trim());
+  }catch{}
+}
+function loadInputs(){
+  try{
+    const r = localStorage.getItem(LS_ROOM) || "";
+    const n = localStorage.getItem(LS_NAME) || "";
+    if(r) document.getElementById("room").value = r;
+    if(n) document.getElementById("name").value = n;
+  }catch{}
+}
+window.addEventListener("load", () => {
+  loadInputs();
+  document.getElementById("room").addEventListener("input", saveInputs);
+  document.getElementById("name").addEventListener("input", saveInputs);
+});
+
+function beep(freq=440, ms=70){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type="sine"; o.frequency.value=freq;
+    g.gain.value=0.06;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    setTimeout(()=>o.stop(), ms);
+  }catch(e){}
+}
+
+let toastTimer=null;
+function toast(text){
+  const t=document.getElementById("toast");
+  t.innerText=text;
+  t.style.display="block";
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.style.display="none", 1700);
+}
+
+function create(){
+  saveInputs();
+  room=document.getElementById("room").value.trim();
+  if(!room) return alert("Bitte Lobby-Code eingeben");
+  const maxPlayers=Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value || "2")));
+  socket.emit("create", { room, maxPlayers });
+  join();
+}
+
+function join(){
+  saveInputs();
+  room=document.getElementById("room").value.trim();
+  if(!room) return alert("Bitte Lobby-Code eingeben");
+  const name=document.getElementById("name").value.trim();
+  socket.emit("join", { room, name });
+  beep(520,60);
+}
+
+socket.on("errorMsg", (msg)=> alert(msg));
+
+socket.on("state", (s)=>{
+  state=s;
+  myId=socket.id;
+  render();
+});
+
+socket.on("hand", (hand)=>{
+  myHand=hand||[];
+  renderHand();
+});
+
+function isValid(card, pileName, pileValue){
+  return pileName.startsWith("up")
+    ? (card>pileValue || card===pileValue-10)
+    : (card<pileValue || card===pileValue+10);
+}
+
+function hasAnyLegalMove(){
+  if(!state) return false;
+  for(const c of (myHand||[])){
+    for(const p in state.piles){
+      if(isValid(c, p, state.piles[p])) return true;
+    }
+  }
   return false;
 }
 
-function anyLegalMoveForAnyone(game) {
-  for (const pid in game.players) if (anyLegalMoveForPlayer(game, pid)) return true;
-  return false;
+function minPlaysThisTurn(){
+  return (state && state.deckCount === 0) ? 1 : 2;
 }
 
-function refillHand(game, pid) {
-  const pl = game.players[pid];
-  if (!pl) return;
-  while (pl.hand.length < game.handSize && game.deck.length > 0) {
-    pl.hand.push(game.deck.pop());
-  }
+function showOverlay(html){
+  const ov=document.getElementById("overlay");
+  ov.innerHTML=`<div class="box">${html}</div>`;
+  ov.style.display="flex";
+}
+function hideOverlay(){
+  const ov=document.getElementById("overlay");
+  ov.style.display="none";
+  ov.innerHTML="";
 }
 
-function emitState(room) {
-  const g = games[room];
-  if (!g) return;
+let lastEndSound=null;
+let lastPassHint=false;
 
-  io.to(room).emit("state", {
-    room,
-    status: g.status,
-    maxPlayers: g.maxPlayers,
-    deckCount: g.deck.length,
-    piles: g.piles,
-    turn: g.turn,
-    playedThisTurn: g.playedThisTurn,
-    pilePings: g.pilePings,
-    players: Object.fromEntries(
-      Object.entries(g.players).map(([id, p]) => [id, { name: p.name, handCount: p.hand.length }])
-    ),
-    stats: g.stats
-  });
-
-  for (const pid in g.players) {
-    const s = io.sockets.sockets.get(pid);
-    if (s) s.emit("hand", g.players[pid].hand);
-  }
+/* Ping chips: Drag (Desktop) + Tap-to-arm (Mobile) */
+function setArmedPing(typeOrNull){
+  armedPing = typeOrNull;
+  document.getElementById("chipHave").classList.toggle("armed", armedPing==="have");
+  document.getElementById("chipDont").classList.toggle("armed", armedPing==="dont");
 }
 
-io.on("connection", (socket) => {
-  socket.on("create", ({ room, maxPlayers }) => {
-    if (!room) return;
+["chipHave","chipDont"].forEach(id=>{
+  const el = document.getElementById(id);
 
-    // ✅ Lobby neu anlegen, wenn sie nicht existiert ODER leer/kaputt ist
-    if (!games[room]) {
-      newRoom(room, maxPlayers);
-    } else if (games[room] && Object.keys(games[room].players || {}).length === 0) {
-      newRoom(room, maxPlayers);
-    }
-
-    socket.join(room);
-    emitState(room);
+  el.addEventListener("dragstart", (e)=>{
+    e.dataTransfer.setData("pingType", el.dataset.type);
+    try { e.dataTransfer.effectAllowed = "copy"; } catch {}
   });
 
-  socket.on("join", ({ room, name }) => {
-    const g = games[room];
-    if (!g) return socket.emit("errorMsg", "Lobby existiert nicht (erst erstellen).");
-    if (Object.keys(g.players).length >= g.maxPlayers) return socket.emit("errorMsg", "Lobby ist voll.");
-
-    socket.join(room);
-    g.players[socket.id] = { name: (name || "Spieler").toString().slice(0, 18), hand: [] };
-    g.playedThisTurn[socket.id] = 0;
-
-    refillHand(g, socket.id);
-
-    if (g.status === "waiting" && Object.keys(g.players).length === g.maxPlayers) {
-      g.status = "playing";
-      g.turn = Object.keys(g.players)[0];
-    }
-
-    emitState(room);
-  });
-
-  // ✅ Stapel-Ping (👀 / 🚫)
-  socket.on("pilePing", ({ room, pile, type }) => {
-    const g = games[room];
-    if (!g || !g.piles[pile]) return;
-
-    const safeType = type === "dont" ? "dont" : "have";
-    g.pilePings[pile] = { type: safeType, from: g.players[socket.id]?.name || "Spieler", ts: Date.now() };
-    emitState(room);
-
-    const ts = g.pilePings[pile].ts;
-    setTimeout(() => {
-      const gg = games[room];
-      if (!gg) return;
-      if (gg.pilePings[pile]?.ts === ts) {
-        delete gg.pilePings[pile];
-        emitState(room);
-      }
-    }, 4000);
-  });
-
-  socket.on("play", ({ room, card, pile }) => {
-    const g = games[room];
-    if (!g || g.status !== "playing") return;
-    if (g.turn !== socket.id) return;
-
-    const pl = g.players[socket.id];
-    if (!pl) return;
-
-    const c = Number(card);
-    if (!pl.hand.includes(c)) return;
-    if (!isValid(c, pile, g.piles)) return;
-
-    g.piles[pile] = c;
-    pl.hand = pl.hand.filter((x) => x !== c);
-    g.playedThisTurn[socket.id] = (g.playedThisTurn[socket.id] || 0) + 1;
-
-    // ✅ NICHT nachziehen hier!
-    emitState(room);
-  });
-
-  socket.on("endTurn", ({ room }) => {
-    const g = games[room];
-    if (!g || g.status !== "playing") return;
-    if (g.turn !== socket.id) return;
-
-    const played = g.playedThisTurn[socket.id] || 0;
-    const minPlays = g.deck.length === 0 ? 1 : 2;
-
-    // ✅ PASS erlaubt, wenn du keinen legalen Zug hast
-    if (played < minPlays && anyLegalMoveForPlayer(g, socket.id)) {
-      return socket.emit(
-        "errorMsg",
-        `Du musst mindestens ${minPlays} Karte${minPlays > 1 ? "n" : ""} spielen (wenn möglich).`
-      );
-    }
-
-    // ✅ Jetzt erst auffüllen
-    refillHand(g, socket.id);
-
-    // WIN
-    const ids = Object.keys(g.players);
-    const allHandsEmpty = ids.every((id) => (g.players[id]?.hand.length || 0) === 0);
-    if (g.deck.length === 0 && allHandsEmpty) {
-      g.status = "win";
-      g.stats.games += 1;
-      g.stats.wins += 1;
-      emitState(room);
-      return;
-    }
-
-    // LOSE (nur wenn wirklich niemand mehr kann)
-    if (!anyLegalMoveForAnyone(g)) {
-      g.status = "lose";
-      g.stats.games += 1;
-      g.stats.losses += 1;
-      emitState(room);
-      return;
-    }
-
-    // Turn weitergeben
-    g.playedThisTurn[socket.id] = 0;
-    const idx = ids.indexOf(socket.id);
-    g.turn = ids[(idx + 1) % ids.length];
-
-    emitState(room);
-  });
-
-  socket.on("rematch", ({ room }) => {
-    const old = games[room];
-    if (!old) return;
-
-    const stats = old.stats;
-    const maxPlayers = old.maxPlayers;
-
-    newRoom(room, maxPlayers);
-    games[room].stats = stats;
-
-    // Spieler im Raum rekonstruieren (ohne neues Join nötig)
-    const clients = Array.from(io.sockets.adapter.rooms.get(room) || []);
-    for (const sid of clients) {
-      games[room].players[sid] = { name: "Spieler", hand: [] };
-      games[room].playedThisTurn[sid] = 0;
-      refillHand(games[room], sid);
-    }
-
-    if (Object.keys(games[room].players).length === games[room].maxPlayers) {
-      games[room].status = "playing";
-      games[room].turn = Object.keys(games[room].players)[0];
-    } else {
-      games[room].status = "waiting";
-      games[room].turn = null;
-    }
-
-    emitState(room);
-  });
-
-  socket.on("disconnect", () => {
-    for (const room of Object.keys(games)) {
-      const g = games[room];
-      if (!g.players[socket.id]) continue;
-
-      delete g.players[socket.id];
-      delete g.playedThisTurn[socket.id];
-
-      const ids = Object.keys(g.players);
-      if (ids.length === 0) {
-        delete games[room];
-        continue;
-      }
-      if (g.turn === socket.id) g.turn = ids[0];
-
-      emitState(room);
-    }
+  el.addEventListener("click", ()=>{
+    const t = el.dataset.type;
+    setArmedPing(armedPing===t ? null : t);
+    toast(armedPing ? "Ping abgewählt" : (t==="have" ? "👀 Ping gewählt – tippe einen Stapel" : "🚫 Ping gewählt – tippe einen Stapel"));
+    beep(880,55);
   });
 });
 
-server.listen(PORT, () => console.log("Server läuft auf Port", PORT));
+function sendPilePing(pile, type){
+  if(!room) return toast("Erst Lobby beitreten.");
+  socket.emit("pilePing", { room, pile, type });
+  beep(type==="dont" ? 240 : 860, 70);
+}
+
+/* Card animation */
+function animateCardToPile(cardValue, pileName){
+  const fromEl = cardEls.get(cardValue);
+  const toEl = pileEls[pileName];
+  if(!fromEl || !toEl) return;
+
+  const fr = fromEl.getBoundingClientRect();
+  const tr = toEl.getBoundingClientRect();
+
+  const startX = fr.left + fr.width/2;
+  const startY = fr.top + fr.height/2;
+  const endX   = tr.left + tr.width/2;
+  const endY   = tr.top + tr.height/2;
+
+  const fly = document.createElement("div");
+  fly.className = "flyingCard";
+  fly.textContent = cardValue;
+  fly.style.left = startX + "px";
+  fly.style.top  = startY + "px";
+  document.body.appendChild(fly);
+
+  const dir = pileName.startsWith("up") ? -1 : 1;
+  const midX = (startX + endX) / 2;
+  const midY = (startY + endY) / 2 + dir * 80;
+
+  const anim = fly.animate([
+    { transform: `translate(-50%, -50%) scale(1)`, opacity: 1, offset: 0, left: startX+"px", top: startY+"px" },
+    { transform: `translate(-50%, -50%) scale(1.06)`, opacity: 1, offset: 0.55, left: midX+"px", top: midY+"px" },
+    { transform: `translate(-50%, -50%) scale(0.96)`, opacity: 0.92, offset: 1, left: endX+"px", top: endY+"px" }
+  ], {
+    duration: 420,
+    easing: "cubic-bezier(.2,.9,.2,1)"
+  });
+
+  anim.onfinish = () => fly.remove();
+}
+
+function render(){
+  if(!state) return;
+
+  const joined=Object.keys(state.players||{}).length;
+  document.getElementById("lobbyInfo").innerText=`Lobby: ${state.room} • Spieler: ${joined}/${state.maxPlayers}`;
+  document.getElementById("deckInfo").innerText=`Deck: ${state.deckCount}`;
+  document.getElementById("statsInfo").innerText=`Stats: ${state.stats?.wins||0}W / ${state.stats?.losses||0}L (Games: ${state.stats?.games||0})`;
+
+  const isMyTurn = state.status==="playing" && state.turn===myId;
+  const played = state.playedThisTurn?.[myId] ?? 0;
+  const minPlays = minPlaysThisTurn();
+
+  const ring = document.getElementById("turnRing");
+  if(state.status==="waiting"){
+    document.getElementById("turnInfo").innerText=`Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
+    ring.classList.remove("spinning");
+  } else if(state.status==="playing"){
+    document.getElementById("turnInfo").innerText = isMyTurn
+      ? `DEIN ZUG • gespielt: ${played}/${minPlays} ${state.deckCount===0 ? "(Deck leer)" : ""}`
+      : `Jemand anderes ist dran`;
+    ring.classList.toggle("spinning", isMyTurn);
+  } else {
+    document.getElementById("turnInfo").innerText="";
+    ring.classList.remove("spinning");
+  }
+
+  // EndTurn Button: (>=minPlays) oder PASS wenn keine legalen Züge
+  const endBtn=document.getElementById("endTurnBtn");
+  const canPass = isMyTurn && !hasAnyLegalMove();
+  endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
+
+  if(isMyTurn && canPass && !lastPassHint){
+    toast("Kein legaler Zug → du kannst passen (Zug beenden).");
+    lastPassHint=true;
+  }
+  if(!isMyTurn) lastPassHint=false;
+
+  if(state.status==="win" || state.status==="lose"){
+    showOverlay(`
+      <h2>${state.status==="win" ? "🎉 GEWONNEN" : "💀 VERLOREN"}</h2>
+      <p style="color:var(--muted); margin-top:0;">Rematch startet neue Partie, Stats bleiben.</p>
+      <button onclick="rematch()">Rematch</button>
+    `);
+    const tag = state.status;
+    if(lastEndSound !== tag){
+      beep(state.status==="win" ? 660 : 200, 180);
+      lastEndSound = tag;
+    }
+  } else {
+    hideOverlay();
+    lastEndSound = null;
+  }
+
+  // Piles
+  const pilesDiv=document.getElementById("piles");
+  pilesDiv.innerHTML="";
+  for(const p in state.piles){
+    const val=state.piles[p];
+    const d=document.createElement("div");
+    d.className="pile";
+    d.innerHTML=`<span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span><strong>${val}</strong>`;
+
+    pileEls[p] = d;
+
+    if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
+
+    const ping = state.pilePings?.[p];
+    if(ping){
+      const badge=document.createElement("div");
+      badge.className="pilePing " + ping.type;
+      badge.textContent = ping.type === "dont" ? "🚫" : "👀";
+      d.appendChild(badge);
+    }
+
+    d.addEventListener("dragover", (e)=> e.preventDefault());
+    d.addEventListener("drop", (e)=>{
+      e.preventDefault();
+      const type = e.dataTransfer.getData("pingType");
+      if(type==="have" || type==="dont") sendPilePing(p, type);
+    });
+
+    d.onclick=()=>{
+      if(armedPing){
+        sendPilePing(p, armedPing);
+        setArmedPing(null);
+        toast("Ping gesetzt");
+        return;
+      }
+      tryPlay(p);
+    };
+
+    pilesDiv.appendChild(d);
+  }
+
+  renderHand();
+}
+
+function renderHand(){
+  const handDiv=document.getElementById("hand");
+  handDiv.innerHTML="";
+  cardEls.clear();
+
+  (myHand||[]).forEach((c)=>{
+    const el=document.createElement("div");
+    el.className="card" + (selectedCard===c ? " selected" : "");
+    el.innerText=c;
+    cardEls.set(c, el);
+    el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
+    handDiv.appendChild(el);
+  });
+}
+
+function tryPlay(pile){
+  if(!state || state.status!=="playing") return;
+  if(state.turn!==myId) return toast("Nicht dein Zug.");
+  if(selectedCard===null) return toast("Erst eine Karte auswählen.");
+
+  const ok=isValid(selectedCard, pile, state.piles[pile]);
+  if(!ok) return toast("Dort nicht erlaubt.");
+
+  animateCardToPile(selectedCard, pile);
+  socket.emit("play", { room, card:selectedCard, pile });
+  beep(740,55);
+  selectedCard=null;
+}
+
+function endTurn(){
+  socket.emit("endTurn", { room });
+  beep(600,70);
+}
+
+function rematch(){
+  socket.emit("rematch", { room });
+  selectedCard=null;
+  setArmedPing(null);
+  beep(520,70);
+}
+</script>
+</body>
+</html>
