@@ -27,17 +27,14 @@ function newRoom(room, maxPlayers) {
     status: "waiting",      // waiting | playing | win | lose
     maxPlayers: Math.max(2, Math.min(4, Number(maxPlayers) || 2)),
     handSize: 6,
-    stats: { games: 0, wins: 0, losses: 0 } // pro Lobby
+    stats: { games: 0, wins: 0, losses: 0 } // pro Lobby (bis Server-Neustart)
   };
 }
 
 function isValid(card, pile, piles) {
   const top = piles[pile];
-  if (pile.startsWith("up")) {
-    return card > top || card === top - 10;
-  } else {
-    return card < top || card === top + 10;
-  }
+  if (pile.startsWith("up")) return card > top || card === top - 10;
+  return card < top || card === top + 10;
 }
 
 function anyLegalMoveForPlayer(game, pid) {
@@ -69,7 +66,6 @@ function emitState(room) {
   const game = games[room];
   if (!game) return;
 
-  // Minimale “Public View” (trotzdem: Hände werden pro Client gefiltert)
   io.to(room).emit("state", {
     room,
     status: game.status,
@@ -80,17 +76,17 @@ function emitState(room) {
     turn: game.turn,
     playedThisTurn: game.playedThisTurn,
     players: Object.fromEntries(
-      Object.entries(game.players).map(([id, p]) => [id, { name: p.name, handCount: p.hand.length }])
+      Object.entries(game.players).map(([id, p]) => [
+        id,
+        { name: p.name, handCount: p.hand.length }
+      ])
     ),
     stats: game.stats
   });
 
-  // Jeder bekommt zusätzlich seine Hand
   for (const pid in game.players) {
     const sock = io.sockets.sockets.get(pid);
-    if (sock) {
-      sock.emit("hand", game.players[pid].hand);
-    }
+    if (sock) sock.emit("hand", game.players[pid].hand);
   }
 }
 
@@ -121,11 +117,10 @@ io.on("connection", (socket) => {
     // Initiale Hand
     refillHand(game, socket.id);
 
-    // Turn setzen, sobald Spiel startet
+    // Start automatisch wenn voll
     if (game.status === "waiting" && Object.keys(game.players).length === game.maxPlayers) {
       game.status = "playing";
       game.turn = Object.keys(game.players)[0];
-      // playedThisTurn ist bereits 0
     }
 
     emitState(room);
@@ -150,13 +145,11 @@ io.on("connection", (socket) => {
     if (!player.hand.includes(c)) return;
     if (!isValid(c, pile, game.piles)) return;
 
-    // Karte legen
     game.piles[pile] = c;
     player.hand = player.hand.filter((x) => x !== c);
     game.playedThisTurn[socket.id] = (game.playedThisTurn[socket.id] || 0) + 1;
 
-    // ✅ WICHTIG: NICHT nachziehen hier!
-
+    // ✅ NICHT nachziehen hier!
     emitState(room);
   });
 
@@ -167,27 +160,27 @@ io.on("connection", (socket) => {
 
     const played = game.playedThisTurn[socket.id] || 0;
 
-    // Wenn <2 gespielt: nur erlauben, wenn Spieler wirklich keinen legalen Zug mehr hat -> dann LOSE
-    if (played < 2) {
+    // ✅ NEU: Deck leer -> min 1 Karte; sonst min 2 Karten
+    const minPlays = game.deck.length === 0 ? 1 : 2;
+
+    // ✅ PASS-FIX: wenn < minPlays gespielt, nur erlauben wenn Spieler keinen legalen Zug hat
+    if (played < minPlays) {
       if (anyLegalMoveForPlayer(game, socket.id)) {
-        return socket.emit("errorMsg", "Du musst mindestens 2 Karten spielen (wenn möglich).");
-      } else {
-        // kann nicht 2 spielen -> Spiel verloren
-        game.status = "lose";
-        game.stats.games += 1;
-        game.stats.losses += 1;
-        emitState(room);
-        return;
+        return socket.emit(
+          "errorMsg",
+          `Du musst mindestens ${minPlays} Karte${minPlays > 1 ? "n" : ""} spielen (wenn möglich).`
+        );
       }
+      // Pass erlaubt
     }
 
     // ✅ JETZT erst auffüllen
     refillHand(game, socket.id);
 
-    // Win/Lose prüfen
+    // Win prüfen
     const ids = Object.keys(game.players);
-
     const allHandsEmpty = ids.every((id) => (game.players[id]?.hand.length || 0) === 0);
+
     if (game.deck.length === 0 && allHandsEmpty) {
       game.status = "win";
       game.stats.games += 1;
@@ -196,6 +189,7 @@ io.on("connection", (socket) => {
       return;
     }
 
+    // Lose prüfen (nur wenn wirklich niemand mehr legen kann)
     if (!anyLegalMoveForAnyone(game)) {
       game.status = "lose";
       game.stats.games += 1;
@@ -219,14 +213,10 @@ io.on("connection", (socket) => {
     const stats = old.stats;
     const maxPlayers = old.maxPlayers;
 
-    // Room neu initialisieren, Stats behalten
     newRoom(room, maxPlayers);
     games[room].stats = stats;
 
-    // Spieler bleiben drin, müssen re-joinen? -> wir auto-rejoinen, indem wir sie wieder eintragen
-    // (Socket-Room bleibt, aber Player-Map ist neu)
-    // Einfach: Alle im Raum müssen „join“ nochmal klicken ist doof.
-    // Besser: wir rekonstruieren aus aktuellen Room-Clients:
+    // Spieler im Raum rekonstruieren (ohne neues Join nötig)
     const clients = Array.from(io.sockets.adapter.rooms.get(room) || []);
     for (const sid of clients) {
       games[room].players[sid] = { name: "Spieler", hand: [] };
@@ -254,22 +244,12 @@ io.on("connection", (socket) => {
       delete game.playedThisTurn[socket.id];
 
       const ids = Object.keys(game.players);
-
       if (ids.length === 0) {
-        // Leere Lobby aufräumen
         delete games[room];
         continue;
       }
 
-      // Wenn der aktuelle Turn weg ist -> Turn auf ersten setzen
-      if (game.turn === socket.id) {
-        game.turn = ids[0];
-      }
-
-      // Wenn Spiel noch wartet, bleibt es warten
-      if (game.status === "playing" && ids.length < game.maxPlayers) {
-        // Optional: weiter spielen erlaubt. Wir lassen es weiterlaufen.
-      }
+      if (game.turn === socket.id) game.turn = ids[0];
 
       emitState(room);
     }
