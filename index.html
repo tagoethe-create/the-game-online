@@ -142,12 +142,14 @@ button.secondary{
 }
 
 /* ====== PILES: like real card stacks ====== */
+/* 🃏 Stapel immer 2 × 2 – auf allen Geräten */
 .piles{
-  display:flex;
+  display:grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap:26px 34px;
   justify-content:center;
-  gap:26px;
-  margin:22px 0 10px;
-  flex-wrap:wrap;
+  margin:22px auto 10px;
+  width: max-content;
 }
 
 .pile{
