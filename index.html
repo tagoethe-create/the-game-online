@@ -179,21 +179,6 @@ button.secondary{
   transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
 }
 
-/* Fake stacked cards behind */
-.pile::before,
-.pile::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  border-radius:16px;
-  background:
-    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.45), rgba(255,255,255,0) 60%),
-    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 60%, var(--paper3) 100%);
-  border:2px solid rgba(120,70,40,.25);
-  z-index:-1;
-}
-.pile::before{ transform: translate(5px,5px); }
-.pile::after{ transform: translate(10px,10px); opacity:.85; }
 
 /* Up/Down colored inner frame */
 .pile.up{
