@@ -508,10 +508,26 @@ function join(){
 
 /* events */
 socket.on("errorMsg", (msg)=> {
-  alert(msg);
-  if(String(msg).toLowerCase().includes("lobby existiert nicht")){
-    scheduleJoinRetry();
+  const m = String(msg).toLowerCase();
+
+  // ❗ Lobby wirklich weg → nicht retry-spammen
+  if (m.includes("lobby existiert nicht")) {
+    showOverlay(`
+      <h2>⚠️ Lobby existiert nicht</h2>
+      <p style="color:var(--muted); margin-top:0;">
+        Die Lobby ist aktuell nicht im Server gespeichert.<br>
+        Das passiert z.B. nach einem Server-Neustart oder wenn sie abgelaufen ist.
+      </p>
+      <div class="choiceRow">
+        <button class="choiceBtn" onclick="create()">Lobby neu erstellen</button>
+        <button class="choiceBtn secondary" onclick="hideOverlay()">Abbrechen</button>
+      </div>
+    `);
+    return;
   }
+
+  // andere Fehler nur anzeigen
+  alert(msg);
 });
 
 socket.on("state", (s)=>{ state=s; render(); });
