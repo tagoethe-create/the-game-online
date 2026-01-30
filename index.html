@@ -261,10 +261,11 @@ button.secondary{
 
   border-radius:16px;
 
-  background:
-    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
-    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
-    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
+  background-color: #efe0bf;   /* Fallback, falls Gradients ausfallen */
+background-image:
+  radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+  radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+  linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
 
   border:2px solid var(--paperBorder);
 
@@ -381,10 +382,11 @@ button.secondary{
   position:fixed;
   z-index:10000;
   pointer-events:none;
-  background:
-    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
-    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
-    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
+  background-color: #efe0bf;   /* Fallback, falls Gradients ausfallen */
+background-image:
+  radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+  radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+  linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
   border:2px solid var(--paperBorder);
   box-shadow:
     inset 0 0 0 3px var(--paperInner),
