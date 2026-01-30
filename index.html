@@ -411,6 +411,7 @@ let room="", state=null, myHand=[], selectedCard=null;
 let armedPing=null;
 let myStats={games:0,wins:0,losses:0};
 let lastPassHint=false;
+let hasEverJoined = false;
 
 const pileEls = {};
 const cardEls = new Map();
@@ -484,7 +485,9 @@ window.addEventListener("load", ()=>{
 /* auto rejoin */
 socket.on("connect", () => {
   joinRetryCount = 0;
-  robustJoin();
+
+  // ✅ nur Auto-Rejoin nach einem echten Join (Reconnect-Fall)
+  if (hasEverJoined) robustJoin();
 });
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && socket.connected) robustJoin();
@@ -530,8 +533,17 @@ socket.on("errorMsg", (msg)=> {
   alert(msg);
 });
 
-socket.on("state", (s)=>{ state=s; render(); });
-socket.on("hand", (hand)=>{ myHand=hand||[]; renderHand(); });
+socket.on("state", (s)=>{ 
+  hasEverJoined = true;
+  state=s; 
+  render(); 
+});
+
+socket.on("hand", (hand)=>{ 
+  hasEverJoined = true;
+  myHand=hand||[]; 
+  renderHand(); 
+});
 socket.on("stats", (s)=>{ myStats=s||myStats; render(); });
 
 /* Rules */
