@@ -622,7 +622,8 @@ function renderHand(){
   (myHand||[]).forEach((c)=>{
     const el=document.createElement("div");
     el.className="card" + (selectedCard===c ? " selected" : "");
-    el.innerText=c;
+    el.innerText = c;
+el.dataset.value = c;
     cardEls.set(c, el);
     el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
     handDiv.appendChild(el);
