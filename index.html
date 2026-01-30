@@ -122,47 +122,55 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
 .pile .pilePing.dont{ color:var(--danger); }
 
 #hand{ margin-top:10px; }
+/* 🎴 Real-card look (Rommé-ish), vintage paper, red double border, black numbers */
 .card{
   position:relative;
   display:inline-flex;
   align-items:center;
   justify-content:center;
 
-  width:64px;
-  height:92px;
+  width:72px;
+  height:104px;
+  margin:10px;
 
-  margin:8px;
-  border-radius:18px;
+  border-radius:16px;
 
+  /* Vintage paper */
   background:
-    linear-gradient(160deg, #2f2f2f 0%, #242424 100%);
-  color:#f5f5f5;
+    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, #f3e6c8 0%, #efe0bf 50%, #ead9b4 100%);
 
-  font-size:22px;
-  font-weight:700;
-  letter-spacing:0.5px;
-
+  /* Double border (outer subtle + inner red) */
+  border:2px solid rgba(120,70,40,.35);
   box-shadow:
-    0 6px 14px rgba(0,0,0,.45),
-    inset 0 1px 0 rgba(255,255,255,.06);
+    inset 0 0 0 3px rgba(255,255,255,.55),
+    inset 0 0 0 6px rgba(200,40,40,.95),
+    0 10px 22px rgba(0,0,0,.45);
 
+  color:#111; /* black-ish */
   cursor:pointer;
   user-select:none;
 
-  transition:
-    transform .15s ease,
-    box-shadow .15s ease,
-    outline .15s ease;
+  /* Big number */
+  font-size:34px;
+  font-weight:800;
+  letter-spacing:0.5px;
+  font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
+
+  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
 }
 
-/* kleine „Eckenmarkierung“ wie echte Karten */
+/* Small corner numbers (black) */
 .card::before,
 .card::after{
   content: attr(data-value);
   position:absolute;
-  font-size:11px;
-  font-weight:600;
-  opacity:.65;
+  color:#111;
+  font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
+  font-weight:700;
+  font-size:14px;
+  letter-spacing:0.2px;
 }
 
 .card::before{
@@ -176,26 +184,50 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   transform: rotate(180deg);
 }
 
-/* Hover / Fokus */
+/* Subtle “paper wear” */
+.card{
+  filter: saturate(0.95) contrast(1.02);
+}
+
+/* Hover / lift */
 .card:hover{
   transform: translateY(-4px);
   box-shadow:
-    0 10px 22px rgba(0,0,0,.55),
-    inset 0 1px 0 rgba(255,255,255,.08);
+    inset 0 0 0 3px rgba(255,255,255,.6),
+    inset 0 0 0 6px rgba(200,40,40,1),
+    0 14px 30px rgba(0,0,0,.55);
 }
 
-/* Auswahl */
+/* Selected */
 .card.selected{
-  outline:2px solid var(--accent);
+  transform: translateY(-7px) scale(1.03);
   box-shadow:
-    0 0 0 2px rgba(76,175,80,.35),
-    0 12px 26px rgba(0,0,0,.6);
-  transform: translateY(-6px) scale(1.04);
+    inset 0 0 0 3px rgba(255,255,255,.65),
+    inset 0 0 0 6px rgba(200,40,40,1),
+    0 18px 34px rgba(0,0,0,.60),
+    0 0 0 3px rgba(76,175,80,.35);
 }
 
-/* Tippen auf Mobile */
+/* Tap (mobile) */
 .card:active{
-  transform: scale(0.96);
+  transform: scale(0.97);
+}
+
+/* Optional: make flying animation card match the new style too */
+.flyingCard{
+  background:
+    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, #f3e6c8 0%, #efe0bf 50%, #ead9b4 100%);
+  border:2px solid rgba(120,70,40,.35);
+  box-shadow:
+    inset 0 0 0 3px rgba(255,255,255,.55),
+    inset 0 0 0 6px rgba(200,40,40,.95),
+    0 16px 34px rgba(0,0,0,.60);
+  color:#111;
+  font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
+  font-weight:800;
+  font-size:34px;
 }
 
 #actions{
