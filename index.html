@@ -9,13 +9,11 @@
 <style>
 :root{
   --bg:#121212;
-  --panel:#1e1e1e;
   --text:#f2f2f2;
   --muted:#a0a0a0;
   --accent:#4caf50;
   --danger:#ff5252;
 
-  /* Vintage paper */
   --paper1:#f3e6c8;
   --paper2:#efe0bf;
   --paper3:#ead9b4;
@@ -23,8 +21,8 @@
   --paperBorder: rgba(120,70,40,.35);
   --paperInner: rgba(255,255,255,.55);
 
-  --redFrame: rgba(88, 25, 15);
-  --greenFrame: rgba(60, 101, 56);
+  --redFrame: rgba(200,40,40,.95);
+  --greenFrame: rgba(76,175,80,.90);
 }
 
 *{ box-sizing:border-box; }
@@ -79,7 +77,6 @@ button.secondary{
   color:var(--muted);
 }
 
-/* Turn ring wrapper */
 #turnInfoWrap{
   display:flex;
   align-items:center;
@@ -87,7 +84,7 @@ button.secondary{
   justify-content:center;
 }
 
-/* Ring base */
+/* Turn ring */
 .turnRing{
   width:18px;
   height:18px;
@@ -138,18 +135,17 @@ button.secondary{
 .pingchip:active{ cursor:grabbing; transform:scale(0.99); }
 .pingchip.armed{
   outline:2px solid var(--accent);
-  box-shadow:0 0 10px rgba(60, 101, 56);
+  box-shadow:0 0 10px rgba(76,175,80,.6);
 }
 
-/* ====== PILES: like real card stacks ====== */
-/* 🃏 Stapel immer 2 × 2 – auf allen Geräten */
+/* ✅ PILES: always 2×2 */
 .piles{
   display:grid;
   grid-template-columns: repeat(2, 1fr);
   gap:26px 34px;
   justify-content:center;
   margin:22px auto 10px;
-  width: max-content;
+  width:max-content;
 }
 
 .pile{
@@ -159,7 +155,8 @@ button.secondary{
   border-radius:16px;
   cursor:pointer;
 
-  background:
+  background-color: var(--paper2); /* fallback */
+  background-image:
     radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
     radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
     linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 60%, var(--paper3) 100%);
@@ -167,7 +164,7 @@ button.secondary{
   border:2px solid var(--paperBorder);
   box-shadow:
     inset 0 0 0 3px var(--paperInner),
-    0 10px 22px rgba(0,0,0,.45);
+    0 12px 26px rgba(0,0,0,.45);
 
   display:flex;
   align-items:center;
@@ -179,61 +176,38 @@ button.secondary{
   color:#111;
 
   transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  transform: translateZ(0);
 }
 
-
-/* Up/Down colored inner frame */
 .pile.up{
   box-shadow:
     inset 0 0 0 3px var(--paperInner),
     inset 0 0 0 6px var(--greenFrame),
-    0 10px 22px rgba(0,0,0,.45);
+    0 12px 26px rgba(0,0,0,.45);
 }
 .pile.down{
   box-shadow:
     inset 0 0 0 3px var(--paperInner),
     inset 0 0 0 6px var(--redFrame),
-    0 10px 22px rgba(0,0,0,.45);
+    0 12px 26px rgba(0,0,0,.45);
 }
 
-/* Arrow label */
 .pile .arrow{
   position:absolute;
   top:-18px;
   font-size:18px;
-  opacity:.80;
+  opacity:.82;
   font-weight:900;
 }
 .pile.up .arrow{ color: var(--accent); }
-.pile.down .arrow{ color: rgba(88, 25, 15); }
+.pile.down .arrow{ color: rgba(200,40,40,1); }
 
-.pile:hover{
-  transform: translateY(-4px);
-  box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.62),
-    inset 0 0 0 6px rgba(0,0,0,0),
-    0 14px 30px rgba(0,0,0,.55);
-}
-.pile.up:hover{
-  box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.62),
-    inset 0 0 0 6px rgba(60, 101, 56),
-    0 14px 30px rgba(0,0,0,.55);
-}
-.pile.down:hover{
-  box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.62),
-    inset 0 0 0 6px rgba(88, 25, 15),
-    0 14px 30px rgba(0,0,0,.55);
-}
+.pile:hover{ transform: translateY(-3px); }
 
-/* Valid highlight when a card is selected */
 .pile.valid{
   outline: 3px solid rgba(76,175,80,.35);
-  filter: saturate(1.02) contrast(1.02);
 }
 
-/* Ping badges on pile */
 .pile .pilePing{
   position:absolute;
   top:-12px;
@@ -243,10 +217,10 @@ button.secondary{
 }
 .pile.blocked{
   filter: grayscale(0.25);
-  opacity:.65;
+  opacity:.7;
 }
 
-/* ====== CARDS: real rommé-ish look ====== */
+/* CARDS */
 #hand{ margin-top:10px; }
 
 .card{
@@ -261,17 +235,17 @@ button.secondary{
 
   border-radius:16px;
 
-  background-color: #efe0bf;   /* Fallback, falls Gradients ausfallen */
-background-image:
-  radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
-  radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
-  linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
+  background-color: var(--paper2); /* fallback */
+  background-image:
+    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
 
   border:2px solid var(--paperBorder);
 
   box-shadow:
     inset 0 0 0 3px var(--paperInner),
-    inset 0 0 0 6px rgba(88, 25, 15),
+    inset 0 0 0 6px rgba(200,40,40,.95),
     0 10px 22px rgba(0,0,0,.45);
 
   color:#111;
@@ -283,8 +257,8 @@ background-image:
   letter-spacing:0.5px;
   font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
 
-  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
-  filter: saturate(0.96) contrast(1.02);
+  transition: transform .14s ease, box-shadow .14s ease;
+  transform: translateZ(0);
 }
 
 .card::before,
@@ -308,7 +282,7 @@ background-image:
   transform: translateY(-4px);
   box-shadow:
     inset 0 0 0 3px rgba(255,255,255,.62),
-    inset 0 0 0 6px rgba(88, 25, 15),
+    inset 0 0 0 6px rgba(200,40,40,1),
     0 14px 30px rgba(0,0,0,.55);
 }
 
@@ -316,9 +290,9 @@ background-image:
   transform: translateY(-7px) scale(1.03);
   box-shadow:
     inset 0 0 0 3px rgba(255,255,255,.65),
-    inset 0 0 0 6px rgba(88, 25, 15),
+    inset 0 0 0 6px rgba(200,40,40,1),
     0 18px 34px rgba(0,0,0,.60),
-    0 0 0 3px rgba(60, 101, 56);
+    0 0 0 3px rgba(76,175,80,.35);
 }
 
 .card:active{ transform: scale(0.97); }
@@ -377,32 +351,38 @@ background-image:
   font-size:14px;
 }
 
-/* Flying card matches card style */
+/* Flying card */
 .flyingCard{
   position:fixed;
   z-index:10000;
   pointer-events:none;
-  background-color: #efe0bf;   /* Fallback, falls Gradients ausfallen */
-background-image:
-  radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
-  radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
-  linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
+
+  background-color: var(--paper2);
+  background-image:
+    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
+
   border:2px solid var(--paperBorder);
   box-shadow:
     inset 0 0 0 3px var(--paperInner),
-    inset 0 0 0 6px rgba(88, 25, 15),
+    inset 0 0 0 6px rgba(200,40,40,.95),
     0 16px 34px rgba(0,0,0,.60);
+
   color:#111;
   font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
   font-weight:900;
   font-size:36px;
+
   border-radius:16px;
   min-width:74px;
   min-height:108px;
+
   display:flex;
   align-items:center;
   justify-content:center;
-  transform: translate(-50%, -50%);
+
+  transform: translate(-50%, -50%) translateZ(0);
   will-change: transform, opacity;
 }
 
@@ -458,7 +438,23 @@ background-image:
 const SERVER_URL = "https://the-game-server-h9br.onrender.com";
 const socket = io(SERVER_URL);
 
-let room="", myId="", state=null, myHand=[], selectedCard=null;
+/* ✅ Persistent player token (fixes mobile reconnect / reload) */
+const LS_TOKEN = "thegame_token";
+function getToken(){
+  try{
+    let t = localStorage.getItem(LS_TOKEN);
+    if(!t){
+      t = (crypto?.randomUUID?.() || (Date.now()+"-"+Math.random()).replace(".",""));
+      localStorage.setItem(LS_TOKEN, t);
+    }
+    return t;
+  }catch{
+    return (Date.now()+"-"+Math.random()).replace(".","");
+  }
+}
+const myToken = getToken();
+
+let room="", state=null, myHand=[], selectedCard=null;
 let audioCtx=null;
 let armedPing=null;
 const pileEls = {};
@@ -486,7 +482,7 @@ window.addEventListener("load", ()=>{
   document.getElementById("name").addEventListener("input", saveInputs);
 });
 
-/* Sounds */
+/* Sound */
 function beep(freq=440, ms=70){
   try{
     if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -542,20 +538,13 @@ function join(){
   room=document.getElementById("room").value.trim();
   if(!room) return alert("Bitte Lobby-Code eingeben");
   const name=document.getElementById("name").value.trim();
-  socket.emit("join", { room, name });
+  socket.emit("join", { room, name, token: myToken });
   beep(520,60);
 }
 
 socket.on("errorMsg", (msg)=> alert(msg));
-socket.on("state", (s)=>{
-  state=s;
-  myId=socket.id;
-  render();
-});
-socket.on("hand", (hand)=>{
-  myHand=hand||[];
-  renderHand();
-});
+socket.on("state", (s)=>{ state=s; render(); });
+socket.on("hand", (hand)=>{ myHand=hand||[]; renderHand(); });
 
 /* Rules */
 function isValid(card, pileName, pileValue){
@@ -578,7 +567,7 @@ function minPlaysThisTurn(){
 
 /* Startpref */
 function sendStartPref(pref){
-  socket.emit("startPref", { room, pref });
+  socket.emit("startPref", { room, token: myToken, pref });
   beep(600,70);
 }
 
@@ -591,13 +580,11 @@ function setArmedPing(typeOrNull){
 ["chipHave","chipDont"].forEach(id=>{
   const el=document.getElementById(id);
 
-  // Desktop drag
   el.addEventListener("dragstart",(e)=>{
     e.dataTransfer.setData("pingType", el.dataset.type);
     try{ e.dataTransfer.effectAllowed="copy"; }catch{}
   });
 
-  // Mobile tap-arming
   el.addEventListener("click", ()=>{
     const t=el.dataset.type;
     setArmedPing(armedPing===t?null:t);
@@ -611,7 +598,7 @@ function sendPilePing(pile, type){
   beep(type==="dont" ? 240 : 860, 70);
 }
 
-/* Card animation */
+/* Flying animation */
 function animateCardToPile(cardValue, pileName){
   const fromEl=cardEls.get(cardValue);
   const toEl=pileEls[pileName];
@@ -646,23 +633,20 @@ function animateCardToPile(cardValue, pileName){
 let lastEndSound=null;
 let lastPassHint=false;
 
-/* Render */
 function render(){
   if(!state) return;
 
-  const joined=Object.keys(state.players||{}).length;
-  document.getElementById("lobbyInfo").innerText=`Lobby: ${state.room} • Spieler: ${joined}/${state.maxPlayers}`;
-  document.getElementById("deckInfo").innerText=`Deck: ${state.deckCount}`;
-  document.getElementById("statsInfo").innerText=`Stats: ${state.stats?.wins||0}W / ${state.stats?.losses||0}L (Games: ${state.stats?.games||0})`;
+  const joined = Object.keys(state.players||{}).length;
+  document.getElementById("lobbyInfo").innerText = `Lobby: ${state.room} • Spieler: ${joined}/${state.maxPlayers}`;
+  document.getElementById("deckInfo").innerText = `Deck: ${state.deckCount}`;
+  document.getElementById("statsInfo").innerText = `Stats: ${state.stats?.wins||0}W / ${state.stats?.losses||0}L (Games: ${state.stats?.games||0})`;
 
-  const isMyTurn = state.status==="playing" && state.turn===myId;
-  const played = state.playedThisTurn?.[myId] ?? 0;
+  const isMyTurn = state.status==="playing" && state.turnToken===myToken;
+  const played = state.playedThisTurn?.[myToken] ?? 0;
   const minPlays = minPlaysThisTurn();
 
   // Vibration only when turn starts
-  if (isMyTurn && !lastWasMyTurn) {
-    vibrate([20, 40, 20]);
-  }
+  if (isMyTurn && !lastWasMyTurn) vibrate([20, 40, 20]);
   lastWasMyTurn = isMyTurn;
   if (state.status !== "playing") lastWasMyTurn = false;
 
@@ -671,9 +655,9 @@ function render(){
   ring.classList.remove("spinning","myTurn","otherTurn");
 
   if(state.status==="waiting"){
-    document.getElementById("turnInfo").innerText=`Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
+    document.getElementById("turnInfo").innerText = `Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
   } else if(state.status==="choosing_start"){
-    document.getElementById("turnInfo").innerText=`Start wählen…`;
+    document.getElementById("turnInfo").innerText = `Start wählen…`;
   } else if(state.status==="playing"){
     document.getElementById("turnInfo").innerText = isMyTurn
       ? `DEIN ZUG • gespielt: ${played}/${minPlays} ${state.deckCount===0 ? "(Deck leer)" : ""}`
@@ -682,7 +666,7 @@ function render(){
     if (isMyTurn) ring.classList.add("myTurn","spinning");
     else ring.classList.add("otherTurn");
   } else {
-    document.getElementById("turnInfo").innerText="";
+    document.getElementById("turnInfo").innerText = "";
   }
 
   // EndTurn button
@@ -696,9 +680,9 @@ function render(){
   }
   if(!isMyTurn) lastPassHint=false;
 
-  // Start choice overlay
+  // Overlay logic
   if(state.status==="choosing_start"){
-    const myMade = !!state.start?.made?.[myId];
+    const myMade = !!state.start?.made?.[myToken];
     const madeCount = Object.values(state.start?.made || {}).filter(Boolean).length;
     showOverlay(`
       <h2>Wer soll anfangen?</h2>
@@ -731,13 +715,11 @@ function render(){
     lastEndSound=null;
   }
 
-  // Render piles
+  // Render piles in table order: down down / up up
   const pilesDiv=document.getElementById("piles");
   pilesDiv.innerHTML="";
 
-  // order like real table: down down up up
   const order = ["down1","down2","up1","up2"];
-
   for(const p of order){
     if(!(p in state.piles)) continue;
 
@@ -745,16 +727,13 @@ function render(){
     const d = document.createElement("div");
     d.className = "pile " + (p.startsWith("up") ? "up" : "down");
 
-    // valid highlight if a card is selected
     if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
 
-    // arrow
-    const a = document.createElement("div");
-    a.className = "arrow";
-    a.textContent = p.startsWith("up") ? "↑" : "↓";
-    d.appendChild(a);
+    const arrow = document.createElement("div");
+    arrow.className = "arrow";
+    arrow.textContent = p.startsWith("up") ? "↑" : "↓";
+    d.appendChild(arrow);
 
-    // value
     const v = document.createElement("div");
     v.textContent = val;
     d.appendChild(v);
@@ -768,11 +747,9 @@ function render(){
       badge.className="pilePing";
       badge.textContent = (ping.type==="dont") ? "🚫" : "👀";
       d.appendChild(badge);
-
       if(ping.type==="dont") d.classList.add("blocked");
     }
 
-    // Desktop drop for ping
     d.addEventListener("dragover",(e)=>e.preventDefault());
     d.addEventListener("drop",(e)=>{
       e.preventDefault();
@@ -780,7 +757,6 @@ function render(){
       if(type==="have"||type==="dont") sendPilePing(p,type);
     });
 
-    // Click: if ping armed -> set ping; else try play
     d.onclick=()=>{
       if(armedPing){
         sendPilePing(p, armedPing);
@@ -806,7 +782,7 @@ function renderHand(){
     const el=document.createElement("div");
     el.className="card" + (selectedCard===c ? " selected" : "");
     el.innerText=c;
-    el.dataset.value = c; // corner numbers
+    el.dataset.value = c;
     cardEls.set(c, el);
 
     el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
@@ -816,20 +792,20 @@ function renderHand(){
 
 function tryPlay(pile){
   if(!state || state.status!=="playing") return;
-  if(state.turn!==myId) return toast("Nicht dein Zug.");
+  if(state.turnToken!==myToken) return toast("Nicht dein Zug.");
   if(selectedCard===null) return toast("Erst eine Karte auswählen.");
 
   const ok=isValid(selectedCard, pile, state.piles[pile]);
   if(!ok) return toast("Dort nicht erlaubt.");
 
   animateCardToPile(selectedCard, pile);
-  socket.emit("play", { room, card:selectedCard, pile });
+  socket.emit("play", { room, token: myToken, card:selectedCard, pile });
   beep(740,55);
   selectedCard=null;
 }
 
 function endTurn(){
-  socket.emit("endTurn", { room });
+  socket.emit("endTurn", { room, token: myToken });
   beep(600,70);
 }
 
