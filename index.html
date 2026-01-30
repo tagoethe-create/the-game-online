@@ -123,22 +123,79 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
 
 #hand{ margin-top:10px; }
 .card{
-  display:inline-block;
-  background:var(--card);
-  padding:14px 18px;
-  margin:8px;
-  border-radius:16px;
-  font-size:18px;
-  min-width:56px;
-  user-select:none;
-  cursor:pointer;
   position:relative;
-  transition: transform .12s ease;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+
+  width:64px;
+  height:92px;
+
+  margin:8px;
+  border-radius:18px;
+
+  background:
+    linear-gradient(160deg, #2f2f2f 0%, #242424 100%);
+  color:#f5f5f5;
+
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:0.5px;
+
+  box-shadow:
+    0 6px 14px rgba(0,0,0,.45),
+    inset 0 1px 0 rgba(255,255,255,.06);
+
+  cursor:pointer;
+  user-select:none;
+
+  transition:
+    transform .15s ease,
+    box-shadow .15s ease,
+    outline .15s ease;
 }
-.card:active{ transform: scale(0.98); }
+
+/* kleine „Eckenmarkierung“ wie echte Karten */
+.card::before,
+.card::after{
+  content: attr(data-value);
+  position:absolute;
+  font-size:11px;
+  font-weight:600;
+  opacity:.65;
+}
+
+.card::before{
+  top:8px;
+  left:10px;
+}
+
+.card::after{
+  bottom:8px;
+  right:10px;
+  transform: rotate(180deg);
+}
+
+/* Hover / Fokus */
+.card:hover{
+  transform: translateY(-4px);
+  box-shadow:
+    0 10px 22px rgba(0,0,0,.55),
+    inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* Auswahl */
 .card.selected{
   outline:2px solid var(--accent);
-  box-shadow:0 0 10px rgba(76,175,80,.7);
+  box-shadow:
+    0 0 0 2px rgba(76,175,80,.35),
+    0 12px 26px rgba(0,0,0,.6);
+  transform: translateY(-6px) scale(1.04);
+}
+
+/* Tippen auf Mobile */
+.card:active{
+  transform: scale(0.96);
 }
 
 #actions{
