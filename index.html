@@ -438,7 +438,7 @@ button.secondary{
 const SERVER_URL = "https://the-game-server-h9br.onrender.com";
 const socket = io(SERVER_URL);
 
-/* ✅ Persistent player token (fixes mobile reconnect / reload) */
+/* ✅ Persistent player token (fixes reconnect / reload) */
 const LS_TOKEN = "thegame_token";
 function getToken(){
   try{
@@ -455,7 +455,6 @@ function getToken(){
 const myToken = getToken();
 
 let room="", state=null, myHand=[], selectedCard=null;
-let audioCtx=null;
 let armedPing=null;
 const pileEls = {};
 const cardEls = new Map();
@@ -476,25 +475,57 @@ function loadInputs(){
     if(n) document.getElementById("name").value=n;
   }catch{}
 }
+
+/* ✅ Robust join helper (used by manual join + auto-rejoin + retries) */
+let joinRetryTimer=null;
+let joinRetryCount=0;
+function robustJoin(reason=""){
+  if(!room){
+    try{ room = (localStorage.getItem(LS_ROOM)||"").trim(); }catch{}
+  }
+  if(!room) return;
+
+  const name =
+    (document.getElementById("name")?.value || "").trim() ||
+    (()=>{ try{ return (localStorage.getItem(LS_NAME)||"").trim(); }catch{ return ""; }})();
+
+  socket.emit("join", { room, name, token: myToken });
+
+  if(reason) toast(reason);
+}
+
+function scheduleJoinRetry(reason){
+  clearTimeout(joinRetryTimer);
+  joinRetryCount = Math.min(joinRetryCount + 1, 5); // max 5 retries
+  const delay = 600 + joinRetryCount*350;           // 0.6s, 1.0s, 1.35s, ...
+  joinRetryTimer = setTimeout(()=>robustJoin(reason), delay);
+}
+
 window.addEventListener("load", ()=>{
   loadInputs();
   document.getElementById("room").addEventListener("input", saveInputs);
   document.getElementById("name").addEventListener("input", saveInputs);
 });
 
-/* Sound */
-function beep(freq=440, ms=70){
-  try{
-    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const o=audioCtx.createOscillator();
-    const g=audioCtx.createGain();
-    o.type="sine"; o.frequency.value=freq;
-    g.gain.value=0.06;
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start();
-    setTimeout(()=>o.stop(), ms);
-  }catch(e){}
-}
+/* ✅ Auto-rejoin when socket connects/reconnects */
+socket.on("connect", () => {
+  joinRetryCount = 0;
+  if(!room){
+    try{ room = (localStorage.getItem(LS_ROOM)||"").trim(); }catch{}
+  }
+  if(room){
+    robustJoin("✅ Verbunden");
+  }
+});
+
+/* ✅ Extra: when tab becomes visible again (iPad/phone common issue) */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && socket.connected) {
+    // Quick re-join to refresh server-side connection mapping
+    robustJoin("");
+  }
+});
+
 
 /* Toast */
 let toastTimer=null;
@@ -518,11 +549,6 @@ function hideOverlay(){
   ov.innerHTML="";
 }
 
-/* Vibration */
-let lastWasMyTurn=false;
-function vibrate(pattern=[25]){
-  try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch{}
-}
 
 /* Create/Join */
 function create(){
@@ -537,14 +563,24 @@ function join(){
   saveInputs();
   room=document.getElementById("room").value.trim();
   if(!room) return alert("Bitte Lobby-Code eingeben");
-  const name=document.getElementById("name").value.trim();
-  socket.emit("join", { room, name, token: myToken });
-  beep(520,60);
+  robustJoin("");
 }
 
-socket.on("errorMsg", (msg)=> alert(msg));
+/* Server events */
+socket.on("errorMsg", (msg)=> {
+  alert(msg);
+
+  // ✅ If server says lobby doesn't exist, retry a few times (Render hiccups)
+  if(String(msg).toLowerCase().includes("lobby existiert nicht")){
+    scheduleJoinRetry("↻ versuche erneut beizutreten…");
+  }
+});
+
 socket.on("state", (s)=>{ state=s; render(); });
 socket.on("hand", (hand)=>{ myHand=hand||[]; renderHand(); });
+
+/* (Optional) If you later add server-side "retryJoin", we support it too */
+socket.on("retryJoin", ()=> scheduleJoinRetry("↻ versuche erneut beizutreten…"));
 
 /* Rules */
 function isValid(card, pileName, pileValue){
@@ -568,7 +604,6 @@ function minPlaysThisTurn(){
 /* Startpref */
 function sendStartPref(pref){
   socket.emit("startPref", { room, token: myToken, pref });
-  beep(600,70);
 }
 
 /* Ping chips */
@@ -589,13 +624,11 @@ function setArmedPing(typeOrNull){
     const t=el.dataset.type;
     setArmedPing(armedPing===t?null:t);
     toast(armedPing ? "Ping abgewählt" : (t==="have" ? "👀 Ping gewählt – tippe einen Stapel" : "🚫 Ping gewählt – tippe einen Stapel"));
-    beep(880,55);
   });
 });
 function sendPilePing(pile, type){
   if(!room) return toast("Erst Lobby beitreten.");
   socket.emit("pilePing", { room, pile, type });
-  beep(type==="dont" ? 240 : 860, 70);
 }
 
 /* Flying animation */
@@ -629,8 +662,6 @@ function animateCardToPile(cardValue, pileName){
   anim.onfinish=()=>fly.remove();
 }
 
-/* End/Wins */
-let lastEndSound=null;
 let lastPassHint=false;
 
 function render(){
@@ -645,10 +676,6 @@ function render(){
   const played = state.playedThisTurn?.[myToken] ?? 0;
   const minPlays = minPlaysThisTurn();
 
-  // Vibration only when turn starts
-  if (isMyTurn && !lastWasMyTurn) vibrate([20, 40, 20]);
-  lastWasMyTurn = isMyTurn;
-  if (state.status !== "playing") lastWasMyTurn = false;
 
   // Turn ring visuals
   const ring=document.getElementById("turnRing");
@@ -669,7 +696,7 @@ function render(){
     document.getElementById("turnInfo").innerText = "";
   }
 
-  // EndTurn button
+  // EndTurn button (pass allowed if no legal move on client)
   const endBtn=document.getElementById("endTurnBtn");
   const canPass = isMyTurn && !hasAnyLegalMove();
   endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
@@ -705,17 +732,12 @@ function render(){
       <p style="color:var(--muted); margin-top:0;">Rematch startet neue Partie, Stats bleiben.</p>
       <button onclick="rematch()">Rematch</button>
     `);
-    const tag=state.status;
-    if(lastEndSound!==tag){
-      beep(state.status==="win" ? 660 : 200, 180);
-      lastEndSound=tag;
-    }
+ 
   } else {
     hideOverlay();
-    lastEndSound=null;
   }
 
-  // Render piles in table order: down down / up up
+  // Render piles (1er oben, 100er unten)
   const pilesDiv=document.getElementById("piles");
   pilesDiv.innerHTML="";
 
@@ -740,7 +762,6 @@ function render(){
 
     pileEls[p] = d;
 
-    // ping visuals
     const ping = state.pilePings?.[p];
     if(ping){
       const badge=document.createElement("div");
@@ -785,7 +806,7 @@ function renderHand(){
     el.dataset.value = c;
     cardEls.set(c, el);
 
-    el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
+    el.onclick=()=>{ selectedCard=c; render(); };
     handDiv.appendChild(el);
   });
 }
@@ -800,20 +821,17 @@ function tryPlay(pile){
 
   animateCardToPile(selectedCard, pile);
   socket.emit("play", { room, token: myToken, card:selectedCard, pile });
-  beep(740,55);
   selectedCard=null;
 }
 
 function endTurn(){
   socket.emit("endTurn", { room, token: myToken });
-  beep(600,70);
 }
 
 function rematch(){
   socket.emit("rematch", { room });
   selectedCard=null;
   setArmedPing(null);
-  beep(520,70);
 }
 </script>
 </body>
