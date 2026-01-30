@@ -719,7 +719,7 @@ function render(){
   const pilesDiv=document.getElementById("piles");
   pilesDiv.innerHTML="";
 
-  const order = ["down1","down2","up1","up2"];
+  const order = ["up1","up2","down1","down2"];
   for(const p of order){
     if(!(p in state.piles)) continue;
 
