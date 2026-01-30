@@ -2,14 +2,11 @@
   "name": "the-game-server",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "ioredis": "^5.4.1",
+    "express": "^4.18.2",
     "socket.io": "^4.7.2"
   }
 }
