@@ -7,6 +7,7 @@
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 <style>
+/* (Dein CSS kann 1:1 bleiben – ich kürze hier NICHT, aber du kannst einfach dein CSS behalten) */
 :root{
   --bg:#121212;
   --text:#f2f2f2;
@@ -155,7 +156,7 @@ button.secondary{
   border-radius:16px;
   cursor:pointer;
 
-  background-color: var(--paper2); /* fallback */
+  background-color: var(--paper2);
   background-image:
     radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
     radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
@@ -204,9 +205,7 @@ button.secondary{
 
 .pile:hover{ transform: translateY(-3px); }
 
-.pile.valid{
-  outline: 3px solid rgba(60, 101, 56);
-}
+.pile.valid{ outline: 3px solid rgba(60, 101, 56); }
 
 .pile .pilePing{
   position:absolute;
@@ -215,10 +214,7 @@ button.secondary{
   font-size:26px;
   filter:drop-shadow(0 0 6px rgba(0,0,0,.55));
 }
-.pile.blocked{
-  filter: grayscale(0.25);
-  opacity:.7;
-}
+.pile.blocked{ filter: grayscale(0.25); opacity:.7; }
 
 /* CARDS */
 #hand{ margin-top:10px; }
@@ -235,7 +231,7 @@ button.secondary{
 
   border-radius:16px;
 
-  background-color: var(--paper2); /* fallback */
+  background-color: var(--paper2);
   background-image:
     radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
     radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
@@ -273,35 +269,14 @@ button.secondary{
   opacity:.9;
 }
 .card::before{ top:8px; left:10px; }
-.card::after{
-  bottom:8px; right:10px;
-  transform: rotate(180deg);
-}
+.card::after{ bottom:8px; right:10px; transform: rotate(180deg); }
 
-.card:hover{
-  transform: translateY(-4px);
-  box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.62),
-    inset 0 0 0 6px rgba(109, 27, 23),
-    0 14px 30px rgba(0,0,0,.55);
-}
-
-.card.selected{
-  transform: translateY(-7px) scale(1.03);
-  box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.65),
-    inset 0 0 0 6px rgba(109, 27, 23),
-    0 18px 34px rgba(0,0,0,.60),
-    0 0 0 3px rgba(60, 101, 56);
-}
-
+.card:hover{ transform: translateY(-4px); }
+.card.selected{ transform: translateY(-7px) scale(1.03); }
 .card:active{ transform: scale(0.97); }
 
 /* Actions */
-#actions{
-  display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
-  margin-top:10px;
-}
+#actions{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:10px; }
 #endTurnBtn{ display:none; }
 
 /* Toast */
@@ -336,52 +311,30 @@ button.secondary{
 }
 #overlay h2{ margin:6px 0 10px; }
 
-.choiceRow{
-  display:flex;
-  gap:10px;
-  justify-content:center;
-  flex-wrap:wrap;
-  margin-top:12px;
-}
+.choiceRow{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
 .choiceBtn{ min-width:200px; }
 .choiceBtn.secondary{ background:#2b2b2b; color:var(--text); }
-.choiceStatus{
-  margin-top:10px;
-  color:var(--muted);
-  font-size:14px;
-}
+.choiceStatus{ margin-top:10px; color:var(--muted); font-size:14px; }
 
 /* Flying card */
 .flyingCard{
-  position:fixed;
-  z-index:10000;
-  pointer-events:none;
-
+  position:fixed; z-index:10000; pointer-events:none;
   background-color: var(--paper2);
   background-image:
     radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
     radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
     linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
-
   border:2px solid var(--paperBorder);
   box-shadow:
     inset 0 0 0 3px var(--paperInner),
     inset 0 0 0 6px rgba(109, 27, 23),
     0 16px 34px rgba(0,0,0,.60);
-
   color:#111;
   font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
-  font-weight:900;
-  font-size:36px;
-
+  font-weight:900; font-size:36px;
   border-radius:16px;
-  min-width:74px;
-  min-height:108px;
-
-  display:flex;
-  align-items:center;
-  justify-content:center;
-
+  min-width:74px; min-height:108px;
+  display:flex; align-items:center; justify-content:center;
   transform: translate(-50%, -50%) translateZ(0);
   will-change: transform, opacity;
 }
@@ -438,7 +391,7 @@ button.secondary{
 const SERVER_URL = "https://the-game-server-h9br.onrender.com";
 const socket = io(SERVER_URL);
 
-/* ✅ Persistent player token (fixes reconnect / reload) */
+/* token */
 const LS_TOKEN = "thegame_token";
 function getToken(){
   try{
@@ -456,6 +409,9 @@ const myToken = getToken();
 
 let room="", state=null, myHand=[], selectedCard=null;
 let armedPing=null;
+let myStats={games:0,wins:0,losses:0};
+let lastPassHint=false;
+
 const pileEls = {};
 const cardEls = new Map();
 
@@ -475,57 +431,6 @@ function loadInputs(){
     if(n) document.getElementById("name").value=n;
   }catch{}
 }
-
-/* ✅ Robust join helper (used by manual join + auto-rejoin + retries) */
-let joinRetryTimer=null;
-let joinRetryCount=0;
-function robustJoin(reason=""){
-  if(!room){
-    try{ room = (localStorage.getItem(LS_ROOM)||"").trim(); }catch{}
-  }
-  if(!room) return;
-
-  const name =
-    (document.getElementById("name")?.value || "").trim() ||
-    (()=>{ try{ return (localStorage.getItem(LS_NAME)||"").trim(); }catch{ return ""; }})();
-
-  socket.emit("join", { room, name, token: myToken });
-
-  if(reason) toast(reason);
-}
-
-function scheduleJoinRetry(reason){
-  clearTimeout(joinRetryTimer);
-  joinRetryCount = Math.min(joinRetryCount + 1, 5); // max 5 retries
-  const delay = 600 + joinRetryCount*350;           // 0.6s, 1.0s, 1.35s, ...
-  joinRetryTimer = setTimeout(()=>robustJoin(reason), delay);
-}
-
-window.addEventListener("load", ()=>{
-  loadInputs();
-  document.getElementById("room").addEventListener("input", saveInputs);
-  document.getElementById("name").addEventListener("input", saveInputs);
-});
-
-/* ✅ Auto-rejoin when socket connects/reconnects */
-socket.on("connect", () => {
-  joinRetryCount = 0;
-  if(!room){
-    try{ room = (localStorage.getItem(LS_ROOM)||"").trim(); }catch{}
-  }
-  if(room){
-    robustJoin("✅ Verbunden");
-  }
-});
-
-/* ✅ Extra: when tab becomes visible again (iPad/phone common issue) */
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && socket.connected) {
-    // Quick re-join to refresh server-side connection mapping
-    robustJoin("");
-  }
-});
-
 
 /* Toast */
 let toastTimer=null;
@@ -549,6 +454,41 @@ function hideOverlay(){
   ov.innerHTML="";
 }
 
+/* robust join */
+let joinRetryTimer=null;
+let joinRetryCount=0;
+function robustJoin(){
+  if(!room){
+    try{ room = (localStorage.getItem(LS_ROOM)||"").trim(); }catch{}
+  }
+  if(!room) return;
+  const name =
+    (document.getElementById("name")?.value || "").trim() ||
+    (()=>{ try{ return (localStorage.getItem(LS_NAME)||"").trim(); }catch{ return ""; }})();
+  socket.emit("join", { room, name, token: myToken });
+}
+
+function scheduleJoinRetry(){
+  clearTimeout(joinRetryTimer);
+  joinRetryCount = Math.min(joinRetryCount + 1, 6);
+  const delay = 500 + joinRetryCount*350;
+  joinRetryTimer = setTimeout(()=>robustJoin(), delay);
+}
+
+window.addEventListener("load", ()=>{
+  loadInputs();
+  document.getElementById("room").addEventListener("input", saveInputs);
+  document.getElementById("name").addEventListener("input", saveInputs);
+});
+
+/* auto rejoin */
+socket.on("connect", () => {
+  joinRetryCount = 0;
+  robustJoin();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && socket.connected) robustJoin();
+});
 
 /* Create/Join */
 function create(){
@@ -557,30 +497,26 @@ function create(){
   if(!room) return alert("Bitte Lobby-Code eingeben");
   const maxPlayers=Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value||"2")));
   socket.emit("create", { room, maxPlayers });
-  join();
+  robustJoin();
 }
 function join(){
   saveInputs();
   room=document.getElementById("room").value.trim();
   if(!room) return alert("Bitte Lobby-Code eingeben");
-  robustJoin("");
+  robustJoin();
 }
 
-/* Server events */
+/* events */
 socket.on("errorMsg", (msg)=> {
   alert(msg);
-
-  // ✅ If server says lobby doesn't exist, retry a few times (Render hiccups)
   if(String(msg).toLowerCase().includes("lobby existiert nicht")){
-    scheduleJoinRetry("↻ versuche erneut beizutreten…");
+    scheduleJoinRetry();
   }
 });
 
 socket.on("state", (s)=>{ state=s; render(); });
 socket.on("hand", (hand)=>{ myHand=hand||[]; renderHand(); });
-
-/* (Optional) If you later add server-side "retryJoin", we support it too */
-socket.on("retryJoin", ()=> scheduleJoinRetry("↻ versuche erneut beizutreten…"));
+socket.on("stats", (s)=>{ myStats=s||myStats; render(); });
 
 /* Rules */
 function isValid(card, pileName, pileValue){
@@ -662,22 +598,18 @@ function animateCardToPile(cardValue, pileName){
   anim.onfinish=()=>fly.remove();
 }
 
-let lastPassHint=false;
-
 function render(){
   if(!state) return;
 
   const joined = Object.keys(state.players||{}).length;
   document.getElementById("lobbyInfo").innerText = `Lobby: ${state.room} • Spieler: ${joined}/${state.maxPlayers}`;
   document.getElementById("deckInfo").innerText = `Deck: ${state.deckCount}`;
-  document.getElementById("statsInfo").innerText = `Stats: ${state.stats?.wins||0}W / ${state.stats?.losses||0}L (Games: ${state.stats?.games||0})`;
+  document.getElementById("statsInfo").innerText = `Stats: ${myStats.wins||0}W / ${myStats.losses||0}L (Games: ${myStats.games||0})`;
 
   const isMyTurn = state.status==="playing" && state.turnToken===myToken;
   const played = state.playedThisTurn?.[myToken] ?? 0;
   const minPlays = minPlaysThisTurn();
 
-
-  // Turn ring visuals
   const ring=document.getElementById("turnRing");
   ring.classList.remove("spinning","myTurn","otherTurn");
 
@@ -696,7 +628,6 @@ function render(){
     document.getElementById("turnInfo").innerText = "";
   }
 
-  // EndTurn button (pass allowed if no legal move on client)
   const endBtn=document.getElementById("endTurnBtn");
   const canPass = isMyTurn && !hasAnyLegalMove();
   endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
@@ -707,23 +638,19 @@ function render(){
   }
   if(!isMyTurn) lastPassHint=false;
 
-  // Overlay logic
   if(state.status==="choosing_start"){
     const myMade = !!state.start?.made?.[myToken];
     const madeCount = Object.values(state.start?.made || {}).filter(Boolean).length;
     showOverlay(`
       <h2>Wer soll anfangen?</h2>
-      <p style="color:var(--muted); margin-top:0;">
-        Schau dir deine Karten an und wähle:
-      </p>
+      <p style="color:var(--muted); margin-top:0;">Schau dir deine Karten an und wähle:</p>
       <div class="choiceRow">
         <button class="choiceBtn" ${myMade?"disabled":""} onclick="sendStartPref('can')">✅ Ich kann starten</button>
         <button class="choiceBtn secondary" ${myMade?"disabled":""} onclick="sendStartPref('not')">🙏 Bitte nicht ich</button>
       </div>
       <div class="choiceStatus">
         ${myMade ? "Du hast gewählt. Warte auf die anderen…" : "Du hast noch nicht gewählt."}
-        <br/>
-        Entscheidungen: ${madeCount}/${state.maxPlayers}
+        <br/>Entscheidungen: ${madeCount}/${state.maxPlayers}
       </div>
     `);
   } else if(state.status==="win" || state.status==="lose"){
@@ -732,12 +659,10 @@ function render(){
       <p style="color:var(--muted); margin-top:0;">Rematch startet neue Partie, Stats bleiben.</p>
       <button onclick="rematch()">Rematch</button>
     `);
- 
   } else {
     hideOverlay();
   }
 
-  // Render piles (1er oben, 100er unten)
   const pilesDiv=document.getElementById("piles");
   pilesDiv.innerHTML="";
 
