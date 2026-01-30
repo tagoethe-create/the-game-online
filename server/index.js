@@ -7,7 +7,11 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
-let games = {};
+
+// ✅ Room bleibt nach "leer" noch bestehen (gegen Render/Reload Stress)
+const ROOM_TTL_MS = 10 * 60 * 1000; // 10 Minuten
+
+const rooms = {}; // roomCode -> game
 
 function makeDeck() {
   const deck = [];
@@ -17,21 +21,46 @@ function makeDeck() {
 }
 
 function newRoom(room, maxPlayers) {
-  games[room] = {
+  rooms[room] = {
+    room,
+    maxPlayers: Math.max(2, Math.min(4, Number(maxPlayers) || 2)),
+    status: "waiting", // waiting | choosing_start | playing | win | lose
+
     deck: makeDeck(),
     piles: { up1: 1, up2: 1, down1: 100, down2: 100 },
-    players: {},            // socketId -> { name, hand: [] }
-    playedThisTurn: {},     // socketId -> number
-    turn: null,
-    status: "waiting",      // waiting | choosing_start | playing | win | lose
-    maxPlayers: Math.max(2, Math.min(4, Number(maxPlayers) || 2)),
     handSize: 6,
+
+    // ✅ Token-based players (not socket.id)
+    players: {}, // token -> { name, hand, socketId, connected, lastSeen }
+
+    turnToken: null,
+    playedThisTurn: {}, // token -> number
+
+    startPrefs: {}, // token -> "can" | "not" | null
+    startChoiceMade: {}, // token -> boolean
+
+    pilePings: {}, // pile -> { type, ts }
+
     stats: { games: 0, wins: 0, losses: 0 },
-    pilePings: {},          // pile -> { type, from, ts }
-    startPrefs: {},         // socketId -> "can" | "not"
-    startChoiceMade: {}     // socketId -> boolean
+
+    emptySince: null
   };
 }
+
+function cleanupRooms() {
+  const now = Date.now();
+  for (const code of Object.keys(rooms)) {
+    const g = rooms[code];
+    const anyConnected = Object.values(g.players).some((p) => p.connected);
+    if (anyConnected) {
+      g.emptySince = null;
+      continue;
+    }
+    if (g.emptySince == null) g.emptySince = now;
+    if (now - g.emptySince > ROOM_TTL_MS) delete rooms[code];
+  }
+}
+setInterval(cleanupRooms, 30 * 1000);
 
 function isValid(card, pile, piles) {
   const top = piles[pile];
@@ -39,23 +68,29 @@ function isValid(card, pile, piles) {
   return card < top || card === top + 10;
 }
 
-function anyLegalMoveForPlayer(game, pid) {
-  const hand = game.players[pid]?.hand || [];
-  for (const c of hand) for (const p in game.piles) if (isValid(c, p, game.piles)) return true;
-  return false;
-}
-
-function anyLegalMoveForAnyone(game) {
-  for (const pid in game.players) if (anyLegalMoveForPlayer(game, pid)) return true;
-  return false;
-}
-
-function refillHand(game, pid) {
-  const pl = game.players[pid];
+function refillHand(game, token) {
+  const pl = game.players[token];
   if (!pl) return;
   while (pl.hand.length < game.handSize && game.deck.length > 0) {
     pl.hand.push(game.deck.pop());
   }
+}
+
+function anyLegalMoveForToken(game, token) {
+  const hand = game.players[token]?.hand || [];
+  for (const c of hand) {
+    for (const p in game.piles) {
+      if (isValid(c, p, game.piles)) return true;
+    }
+  }
+  return false;
+}
+
+function anyLegalMoveForAnyone(game) {
+  for (const t of Object.keys(game.players)) {
+    if (anyLegalMoveForToken(game, t)) return true;
+  }
+  return false;
 }
 
 function pickRandom(arr) {
@@ -63,137 +98,174 @@ function pickRandom(arr) {
 }
 
 function allStartChoicesMade(game) {
-  const ids = Object.keys(game.players);
-  return ids.length > 0 && ids.every((id) => game.startChoiceMade[id]);
+  const tokens = Object.keys(game.players);
+  return tokens.length > 0 && tokens.every((t) => game.startChoiceMade[t]);
 }
 
 function finalizeStartingPlayer(game) {
-  const ids = Object.keys(game.players);
-  const can = ids.filter((id) => game.startPrefs[id] === "can");
-  const not = ids.filter((id) => game.startPrefs[id] === "not");
+  const tokens = Object.keys(game.players);
+  const can = tokens.filter((t) => game.startPrefs[t] === "can");
 
   let starter = null;
   if (can.length === 1) starter = can[0];
   else if (can.length > 1) starter = pickRandom(can);
-  else {
-    // keiner will -> zufällig unter allen (oder optional: bevorzugt "not" vermeiden, aber dann bleibt ggf. keiner)
-    starter = pickRandom(ids);
-  }
+  else starter = pickRandom(tokens);
 
-  game.turn = starter;
+  game.turnToken = starter;
   game.status = "playing";
-  for (const id of ids) game.playedThisTurn[id] = 0;
+  for (const t of tokens) game.playedThisTurn[t] = 0;
 }
 
-function emitState(room) {
-  const g = games[room];
-  if (!g) return;
+function emitState(game) {
+  const playersPublic = {};
+  for (const [token, p] of Object.entries(game.players)) {
+    playersPublic[token] = {
+      name: p.name,
+      handCount: p.hand.length,
+      connected: !!p.connected
+    };
+  }
 
-  io.to(room).emit("state", {
-    room,
-    status: g.status,
-    maxPlayers: g.maxPlayers,
-    deckCount: g.deck.length,
-    piles: g.piles,
-    turn: g.turn,
-    playedThisTurn: g.playedThisTurn,
-    pilePings: g.pilePings,
-    players: Object.fromEntries(
-      Object.entries(g.players).map(([id, p]) => [id, { name: p.name, handCount: p.hand.length }])
-    ),
-    stats: g.stats,
-    start: {
-      prefs: g.startPrefs,
-      made: g.startChoiceMade
-    }
+  io.to(game.room).emit("state", {
+    room: game.room,
+    status: game.status,
+    maxPlayers: game.maxPlayers,
+    deckCount: game.deck.length,
+    piles: game.piles,
+    turnToken: game.turnToken,
+    playedThisTurn: game.playedThisTurn,
+    pilePings: game.pilePings,
+    players: playersPublic,
+    stats: game.stats,
+    start: { prefs: game.startPrefs, made: game.startChoiceMade }
   });
 
-  for (const pid in g.players) {
-    const s = io.sockets.sockets.get(pid);
-    if (s) s.emit("hand", g.players[pid].hand);
+  // each player gets own hand
+  for (const [token, p] of Object.entries(game.players)) {
+    if (!p.socketId) continue;
+    const s = io.sockets.sockets.get(p.socketId);
+    if (s) s.emit("hand", p.hand);
   }
 }
 
 io.on("connection", (socket) => {
+  function markDisconnectedEverywhere() {
+    for (const g of Object.values(rooms)) {
+      for (const [token, p] of Object.entries(g.players)) {
+        if (p.socketId === socket.id) {
+          p.connected = false;
+          p.socketId = null;
+          p.lastSeen = Date.now();
+
+          // if it's their turn, pass to next connected if possible
+          if (g.status === "playing" && g.turnToken === token) {
+            const tokens = Object.keys(g.players);
+            const idx = tokens.indexOf(token);
+
+            let next = null;
+            for (let k = 1; k <= tokens.length; k++) {
+              const cand = tokens[(idx + k) % tokens.length];
+              if (g.players[cand]?.connected) {
+                next = cand;
+                break;
+              }
+            }
+            g.turnToken = next || tokens[0] || null;
+          }
+
+          emitState(g);
+        }
+      }
+    }
+  }
+
   socket.on("create", ({ room, maxPlayers }) => {
     if (!room) return;
-
-    if (!games[room]) {
-      newRoom(room, maxPlayers);
-    } else if (games[room] && Object.keys(games[room].players || {}).length === 0) {
-      newRoom(room, maxPlayers);
-    }
-
-    socket.join(room);
-    emitState(room);
+    if (!rooms[room]) newRoom(room, maxPlayers);
+    // create just ensures room exists
+    emitState(rooms[room]);
   });
 
-  socket.on("join", ({ room, name }) => {
-    const g = games[room];
+  socket.on("join", ({ room, name, token }) => {
+    const g = rooms[room];
     if (!g) return socket.emit("errorMsg", "Lobby existiert nicht (erst erstellen).");
+    if (!token) return socket.emit("errorMsg", "Fehlender Player-Token.");
+
+    socket.join(room);
+
+    // rejoin existing token
+    if (g.players[token]) {
+      g.players[token].name = (name || g.players[token].name || "Spieler").toString().slice(0, 18);
+      g.players[token].socketId = socket.id;
+      g.players[token].connected = true;
+      g.players[token].lastSeen = Date.now();
+      emitState(g);
+      return;
+    }
+
+    // new player
     if (Object.keys(g.players).length >= g.maxPlayers) return socket.emit("errorMsg", "Lobby ist voll.");
 
-    socket.join(room);
+    g.players[token] = {
+      name: (name || "Spieler").toString().slice(0, 18),
+      hand: [],
+      socketId: socket.id,
+      connected: true,
+      lastSeen: Date.now()
+    };
 
-    g.players[socket.id] = { name: (name || "Spieler").toString().slice(0, 18), hand: [] };
-    g.playedThisTurn[socket.id] = 0;
-    g.startPrefs[socket.id] = null;
-    g.startChoiceMade[socket.id] = false;
+    g.playedThisTurn[token] = 0;
+    g.startPrefs[token] = null;
+    g.startChoiceMade[token] = false;
 
-    refillHand(g, socket.id);
+    refillHand(g, token);
 
-    // Wenn Lobby voll ist: Startwahl-Phase (statt sofort playing)
+    // when lobby full -> choose start
     if (g.status === "waiting" && Object.keys(g.players).length === g.maxPlayers) {
       g.status = "choosing_start";
-      g.turn = null;
+      g.turnToken = null;
     }
 
-    emitState(room);
+    emitState(g);
   });
 
-  // ✅ Startpräferenz setzen
-  socket.on("startPref", ({ room, pref }) => {
-    const g = games[room];
-    if (!g) return;
-    if (g.status !== "choosing_start") return;
-    if (!g.players[socket.id]) return;
+  socket.on("startPref", ({ room, token, pref }) => {
+    const g = rooms[room];
+    if (!g || g.status !== "choosing_start") return;
+    if (!g.players[token]) return;
 
-    const p = pref === "can" ? "can" : "not";
-    g.startPrefs[socket.id] = p;
-    g.startChoiceMade[socket.id] = true;
+    g.startPrefs[token] = pref === "can" ? "can" : "not";
+    g.startChoiceMade[token] = true;
 
-    // Wenn alle gewählt haben: Starter bestimmen und starten
-    if (allStartChoicesMade(g)) {
-      finalizeStartingPlayer(g);
-    }
-    emitState(room);
+    if (allStartChoicesMade(g)) finalizeStartingPlayer(g);
+    emitState(g);
   });
 
   socket.on("pilePing", ({ room, pile, type }) => {
-    const g = games[room];
+    const g = rooms[room];
     if (!g || !g.piles[pile]) return;
 
     const safeType = type === "dont" ? "dont" : "have";
-    g.pilePings[pile] = { type: safeType, from: g.players[socket.id]?.name || "Spieler", ts: Date.now() };
-    emitState(room);
+    g.pilePings[pile] = { type: safeType, ts: Date.now() };
+    emitState(g);
 
     const ts = g.pilePings[pile].ts;
     setTimeout(() => {
-      const gg = games[room];
+      const gg = rooms[room];
       if (!gg) return;
       if (gg.pilePings[pile]?.ts === ts) {
         delete gg.pilePings[pile];
-        emitState(room);
+        emitState(gg);
       }
     }, 4000);
   });
 
-  socket.on("play", ({ room, card, pile }) => {
-    const g = games[room];
+  socket.on("play", ({ room, token, card, pile }) => {
+    const g = rooms[room];
     if (!g || g.status !== "playing") return;
-    if (g.turn !== socket.id) return;
+    if (g.turnToken !== token) return;
 
-    const pl = g.players[socket.id];
+    const pl = g.players[token];
     if (!pl) return;
 
     const c = Number(card);
@@ -202,110 +274,97 @@ io.on("connection", (socket) => {
 
     g.piles[pile] = c;
     pl.hand = pl.hand.filter((x) => x !== c);
-    g.playedThisTurn[socket.id] = (g.playedThisTurn[socket.id] || 0) + 1;
+    g.playedThisTurn[token] = (g.playedThisTurn[token] || 0) + 1;
 
-    emitState(room);
+    emitState(g);
   });
 
-  socket.on("endTurn", ({ room }) => {
-    const g = games[room];
+  socket.on("endTurn", ({ room, token }) => {
+    const g = rooms[room];
     if (!g || g.status !== "playing") return;
-    if (g.turn !== socket.id) return;
+    if (g.turnToken !== token) return;
 
-    const played = g.playedThisTurn[socket.id] || 0;
+    const played = g.playedThisTurn[token] || 0;
     const minPlays = g.deck.length === 0 ? 1 : 2;
 
-    if (played < minPlays && anyLegalMoveForPlayer(g, socket.id)) {
-      return socket.emit(
-        "errorMsg",
-        `Du musst mindestens ${minPlays} Karte${minPlays > 1 ? "n" : ""} spielen (wenn möglich).`
-      );
+    // PASS allowed if no legal moves
+    if (played < minPlays && anyLegalMoveForToken(g, token)) {
+      return socket.emit("errorMsg", `Du musst mindestens ${minPlays} Karte${minPlays > 1 ? "n" : ""} spielen (wenn möglich).`);
     }
 
-    refillHand(g, socket.id);
+    // draw only now
+    refillHand(g, token);
 
-    const ids = Object.keys(g.players);
-    const allHandsEmpty = ids.every((id) => (g.players[id]?.hand.length || 0) === 0);
+    const tokens = Object.keys(g.players);
+
+    // WIN
+    const allHandsEmpty = tokens.every((t) => (g.players[t]?.hand.length || 0) === 0);
     if (g.deck.length === 0 && allHandsEmpty) {
       g.status = "win";
       g.stats.games += 1;
       g.stats.wins += 1;
-      emitState(room);
+      emitState(g);
       return;
     }
 
+    // LOSE
     if (!anyLegalMoveForAnyone(g)) {
       g.status = "lose";
       g.stats.games += 1;
       g.stats.losses += 1;
-      emitState(room);
+      emitState(g);
       return;
     }
 
-    g.playedThisTurn[socket.id] = 0;
-    const idx = ids.indexOf(socket.id);
-    g.turn = ids[(idx + 1) % ids.length];
+    // next turn (token order)
+    g.playedThisTurn[token] = 0;
+    const idx = tokens.indexOf(token);
+    g.turnToken = tokens[(idx + 1) % tokens.length];
 
-    emitState(room);
+    emitState(g);
   });
 
   socket.on("rematch", ({ room }) => {
-    const old = games[room];
+    const old = rooms[room];
     if (!old) return;
 
     const stats = old.stats;
     const maxPlayers = old.maxPlayers;
 
+    const keepPlayers = Object.entries(old.players).map(([token, p]) => ({
+      token,
+      name: p.name,
+      socketId: p.socketId,
+      connected: p.connected
+    }));
+
     newRoom(room, maxPlayers);
-    games[room].stats = stats;
+    rooms[room].stats = stats;
 
-    const clients = Array.from(io.sockets.adapter.rooms.get(room) || []);
-    for (const sid of clients) {
-      games[room].players[sid] = { name: "Spieler", hand: [] };
-      games[room].playedThisTurn[sid] = 0;
-      games[room].startPrefs[sid] = null;
-      games[room].startChoiceMade[sid] = false;
-      refillHand(games[room], sid);
+    for (const kp of keepPlayers) {
+      rooms[room].players[kp.token] = {
+        name: kp.name || "Spieler",
+        hand: [],
+        socketId: kp.socketId,
+        connected: kp.connected,
+        lastSeen: Date.now()
+      };
+      rooms[room].playedThisTurn[kp.token] = 0;
+      rooms[room].startPrefs[kp.token] = null;
+      rooms[room].startChoiceMade[kp.token] = false;
+      refillHand(rooms[room], kp.token);
     }
 
-    if (Object.keys(games[room].players).length === games[room].maxPlayers) {
-      games[room].status = "choosing_start";
-      games[room].turn = null;
-    } else {
-      games[room].status = "waiting";
-      games[room].turn = null;
+    if (Object.keys(rooms[room].players).length === rooms[room].maxPlayers) {
+      rooms[room].status = "choosing_start";
+      rooms[room].turnToken = null;
     }
 
-    emitState(room);
+    emitState(rooms[room]);
   });
 
   socket.on("disconnect", () => {
-    for (const room of Object.keys(games)) {
-      const g = games[room];
-      if (!g.players[socket.id]) continue;
-
-      delete g.players[socket.id];
-      delete g.playedThisTurn[socket.id];
-      delete g.startPrefs[socket.id];
-      delete g.startChoiceMade[socket.id];
-
-      const ids = Object.keys(g.players);
-      if (ids.length === 0) {
-        delete games[room];
-        continue;
-      }
-
-      // Wenn wir in Startwahl waren, und Spieler weg ist: prüfen ob alle verbliebenen schon gewählt haben
-      if (g.status === "choosing_start") {
-        if (allStartChoicesMade(g)) {
-          finalizeStartingPlayer(g);
-        }
-      }
-
-      if (g.turn === socket.id) g.turn = ids[0];
-
-      emitState(room);
-    }
+    markDisconnectedEverywhere();
   });
 });
 
