@@ -34,6 +34,17 @@ app.get("/health", async (_req, res) => {
     res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
 });
+app.get("/room/:code", async (req, res) => {
+  try {
+    const room = (req.params.code || "").trim();
+    if (!room) return res.json({ room: "", exists: false });
+
+    const raw = await redis.get(roomKey(room));
+    res.json({ room, exists: !!raw });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
