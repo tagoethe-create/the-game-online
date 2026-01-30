@@ -8,19 +8,39 @@
 
 <style>
 :root{
-  --bg:#121212; --panel:#1e1e1e; --card:#2c2c2c;
-  --accent:#4caf50; --danger:#ff5252;
-  --text:#f2f2f2; --muted:#a0a0a0;
+  --bg:#121212;
+  --panel:#1e1e1e;
+  --text:#f2f2f2;
+  --muted:#a0a0a0;
+  --accent:#4caf50;
+  --danger:#ff5252;
+
+  /* Vintage paper */
+  --paper1:#f3e6c8;
+  --paper2:#efe0bf;
+  --paper3:#ead9b4;
+
+  --paperBorder: rgba(120,70,40,.35);
+  --paperInner: rgba(255,255,255,.55);
+
+  --redFrame: rgba(200,40,40,.95);
+  --greenFrame: rgba(76,175,80,.90);
 }
+
+*{ box-sizing:border-box; }
 
 body{
   margin:0; padding:16px;
-  background:var(--bg); color:var(--text);
+  background:
+    radial-gradient(900px 520px at 50% 0%, rgba(255,255,255,.05), rgba(255,255,255,0) 60%),
+    radial-gradient(900px 520px at 50% 100%, rgba(0,0,0,.35), rgba(0,0,0,.7) 70%),
+    linear-gradient(180deg, #111 0%, #0f0f0f 100%);
+  color:var(--text);
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   text-align:center;
 }
 
-h1{ margin:8px 0 12px; }
+h1{ margin:8px 0 12px; font-weight:800; letter-spacing:.3px; }
 
 #controls{
   display:flex; flex-wrap:wrap; justify-content:center;
@@ -34,9 +54,24 @@ input, button{
   border:none;
 }
 
-input{ min-width:170px; }
-button{ background:var(--accent); color:#0b0b0b; cursor:pointer; min-height:44px; }
-button.secondary{ background:#2b2b2b; color:var(--text); }
+input{
+  min-width:170px;
+  background:#f3f3f3;
+  color:#111;
+}
+
+button{
+  background:var(--accent);
+  color:#0b0b0b;
+  cursor:pointer;
+  min-height:44px;
+  font-weight:700;
+}
+button.secondary{
+  background:#2b2b2b;
+  color:var(--text);
+  font-weight:650;
+}
 
 #topbar{
   display:flex; flex-wrap:wrap; justify-content:center;
@@ -44,6 +79,7 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   color:var(--muted);
 }
 
+/* Turn ring wrapper */
 #turnInfoWrap{
   display:flex;
   align-items:center;
@@ -51,13 +87,23 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   justify-content:center;
 }
 
+/* Ring base */
 .turnRing{
   width:18px;
   height:18px;
   border-radius:999px;
   border:2px solid rgba(160,160,160,.35);
-  border-top-color: rgba(242,242,242,.95);
+  border-top-color: rgba(160,160,160,.8);
   opacity:.9;
+  transition: border-color .25s ease, border-top-color .25s ease;
+}
+.turnRing.myTurn{
+  border-color: rgba(255,82,82,.45);
+  border-top-color: var(--danger);
+}
+.turnRing.otherTurn{
+  border-color: rgba(76,175,80,.35);
+  border-top-color: var(--accent);
 }
 .turnRing.spinning{
   animation: turnSpin 1.15s linear infinite;
@@ -67,16 +113,27 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   to{ transform: rotate(360deg); }
 }
 
+/* Ping bar */
 #pingbar{
-  display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
-  margin:10px 0 6px;
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:12px 0 8px;
 }
 .pingchip{
-  background:#2b2b2b; color:var(--text);
-  padding:12px 14px; border-radius:14px;
-  cursor:grab; user-select:none;
+  background:#2b2b2b;
+  color:var(--text);
+  padding:12px 14px;
+  border-radius:14px;
+  cursor:grab;
+  user-select:none;
   border:1px solid #3a3a3a;
-  min-height:44px; display:flex; align-items:center; gap:8px;
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  box-shadow: 0 10px 18px rgba(0,0,0,.25);
 }
 .pingchip:active{ cursor:grabbing; transform:scale(0.99); }
 .pingchip.armed{
@@ -84,121 +141,189 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   box-shadow:0 0 10px rgba(76,175,80,.6);
 }
 
+/* ====== PILES: like real card stacks ====== */
 .piles{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(140px, 170px));
-  gap:14px;
+  display:flex;
   justify-content:center;
-  margin:14px 0;
+  gap:26px;
+  margin:22px 0 10px;
+  flex-wrap:wrap;
 }
 
 .pile{
-  background:var(--panel);
-  border:2px solid #555;
-  border-radius:16px;
-  padding:14px 10px;
-  user-select:none;
-  min-height:86px;
-  display:flex; flex-direction:column; justify-content:center;
-  cursor:pointer;
   position:relative;
+  width:92px;
+  height:132px;
+  border-radius:16px;
+  cursor:pointer;
+
+  background:
+    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 60%, var(--paper3) 100%);
+
+  border:2px solid var(--paperBorder);
+  box-shadow:
+    inset 0 0 0 3px var(--paperInner),
+    0 10px 22px rgba(0,0,0,.45);
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
+  font-weight:900;
+  font-size:34px;
+  color:#111;
+
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
 }
 
-.pile strong{ font-size:28px; margin-top:4px; display:block; }
-.pile span{ font-size:13px; color:var(--muted); }
+/* Fake stacked cards behind */
+.pile::before,
+.pile::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:16px;
+  background:
+    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.45), rgba(255,255,255,0) 60%),
+    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 60%, var(--paper3) 100%);
+  border:2px solid rgba(120,70,40,.25);
+  z-index:-1;
+}
+.pile::before{ transform: translate(5px,5px); }
+.pile::after{ transform: translate(10px,10px); opacity:.85; }
 
+/* Up/Down colored inner frame */
+.pile.up{
+  box-shadow:
+    inset 0 0 0 3px var(--paperInner),
+    inset 0 0 0 6px var(--greenFrame),
+    0 10px 22px rgba(0,0,0,.45);
+}
+.pile.down{
+  box-shadow:
+    inset 0 0 0 3px var(--paperInner),
+    inset 0 0 0 6px var(--redFrame),
+    0 10px 22px rgba(0,0,0,.45);
+}
+
+/* Arrow label */
+.pile .arrow{
+  position:absolute;
+  top:-18px;
+  font-size:18px;
+  opacity:.80;
+  font-weight:900;
+}
+.pile.up .arrow{ color: var(--accent); }
+.pile.down .arrow{ color: rgba(200,40,40,1); }
+
+.pile:hover{
+  transform: translateY(-4px);
+  box-shadow:
+    inset 0 0 0 3px rgba(255,255,255,.62),
+    inset 0 0 0 6px rgba(0,0,0,0),
+    0 14px 30px rgba(0,0,0,.55);
+}
+.pile.up:hover{
+  box-shadow:
+    inset 0 0 0 3px rgba(255,255,255,.62),
+    inset 0 0 0 6px rgba(76,175,80,1),
+    0 14px 30px rgba(0,0,0,.55);
+}
+.pile.down:hover{
+  box-shadow:
+    inset 0 0 0 3px rgba(255,255,255,.62),
+    inset 0 0 0 6px rgba(200,40,40,1),
+    0 14px 30px rgba(0,0,0,.55);
+}
+
+/* Valid highlight when a card is selected */
 .pile.valid{
-  border-color:var(--accent);
-  box-shadow:0 0 10px rgba(76,175,80,.7);
+  outline: 3px solid rgba(76,175,80,.35);
+  filter: saturate(1.02) contrast(1.02);
 }
 
+/* Ping badges on pile */
 .pile .pilePing{
   position:absolute;
-  top:-12px; right:-12px;
+  top:-12px;
+  right:-12px;
   font-size:26px;
-  filter:drop-shadow(0 0 6px rgba(0,0,0,.5));
+  filter:drop-shadow(0 0 6px rgba(0,0,0,.55));
 }
-.pile .pilePing.have{ color:var(--accent); }
-.pile .pilePing.dont{ color:var(--danger); }
+.pile.blocked{
+  filter: grayscale(0.25);
+  opacity:.65;
+}
 
+/* ====== CARDS: real rommé-ish look ====== */
 #hand{ margin-top:10px; }
-/* 🎴 Real-card look (Rommé-ish), vintage paper, red double border, black numbers */
+
 .card{
   position:relative;
   display:inline-flex;
   align-items:center;
   justify-content:center;
 
-  width:72px;
-  height:104px;
+  width:74px;
+  height:108px;
   margin:10px;
 
   border-radius:16px;
 
-  /* Vintage paper */
   background:
     radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
     radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
-    linear-gradient(180deg, #f3e6c8 0%, #efe0bf 50%, #ead9b4 100%);
+    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
 
-  /* Double border (outer subtle + inner red) */
-  border:2px solid rgba(120,70,40,.35);
+  border:2px solid var(--paperBorder);
+
   box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.55),
-    inset 0 0 0 6px rgba(88, 25, 15),
+    inset 0 0 0 3px var(--paperInner),
+    inset 0 0 0 6px rgba(200,40,40,.95),
     0 10px 22px rgba(0,0,0,.45);
 
-  color:#111; /* black-ish */
+  color:#111;
   cursor:pointer;
   user-select:none;
 
-  /* Big number */
-  font-size:34px;
-  font-weight:800;
+  font-size:36px;
+  font-weight:900;
   letter-spacing:0.5px;
   font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
 
   transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
+  filter: saturate(0.96) contrast(1.02);
 }
 
-/* Small corner numbers (black) */
 .card::before,
 .card::after{
   content: attr(data-value);
   position:absolute;
   color:#111;
   font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
-  font-weight:700;
+  font-weight:800;
   font-size:14px;
   letter-spacing:0.2px;
+  opacity:.9;
 }
-
-.card::before{
-  top:8px;
-  left:10px;
-}
-
+.card::before{ top:8px; left:10px; }
 .card::after{
-  bottom:8px;
-  right:10px;
+  bottom:8px; right:10px;
   transform: rotate(180deg);
 }
 
-/* Subtle “paper wear” */
-.card{
-  filter: saturate(0.95) contrast(1.02);
-}
-
-/* Hover / lift */
 .card:hover{
   transform: translateY(-4px);
   box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.6),
+    inset 0 0 0 3px rgba(255,255,255,.62),
     inset 0 0 0 6px rgba(200,40,40,1),
     0 14px 30px rgba(0,0,0,.55);
 }
 
-/* Selected */
 .card.selected{
   transform: translateY(-7px) scale(1.03);
   box-shadow:
@@ -208,34 +333,16 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
     0 0 0 3px rgba(76,175,80,.35);
 }
 
-/* Tap (mobile) */
-.card:active{
-  transform: scale(0.97);
-}
+.card:active{ transform: scale(0.97); }
 
-/* Optional: make flying animation card match the new style too */
-.flyingCard{
-  background:
-    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
-    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
-    linear-gradient(180deg, #f3e6c8 0%, #efe0bf 50%, #ead9b4 100%);
-  border:2px solid rgba(120,70,40,.35);
-  box-shadow:
-    inset 0 0 0 3px rgba(255,255,255,.55),
-    inset 0 0 0 6px rgba(200,40,40,.95),
-    0 16px 34px rgba(0,0,0,.60);
-  color:#111;
-  font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
-  font-weight:800;
-  font-size:34px;
-}
-
+/* Actions */
 #actions{
   display:flex; justify-content:center; gap:10px; flex-wrap:wrap;
   margin-top:10px;
 }
 #endTurnBtn{ display:none; }
 
+/* Toast */
 #toast{
   position:fixed; left:50%; transform:translateX(-50%);
   bottom:18px;
@@ -247,6 +354,7 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   max-width:min(520px, 92vw);
 }
 
+/* Overlay */
 #overlay{
   position:fixed; inset:0;
   background:rgba(0,0,0,.72);
@@ -258,10 +366,11 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
 }
 #overlay .box{
   width:min(560px, 94vw);
-  background:var(--panel);
+  background:rgba(30,30,30,.96);
   border:2px solid #555;
   border-radius:18px;
   padding:16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6);
 }
 #overlay h2{ margin:6px 0 10px; }
 
@@ -272,39 +381,46 @@ button.secondary{ background:#2b2b2b; color:var(--text); }
   flex-wrap:wrap;
   margin-top:12px;
 }
-.choiceBtn{
-  min-width:200px;
-}
-.choiceBtn.secondary{
-  background:#2b2b2b;
-  color:var(--text);
-}
-
+.choiceBtn{ min-width:200px; }
+.choiceBtn.secondary{ background:#2b2b2b; color:var(--text); }
 .choiceStatus{
   margin-top:10px;
   color:var(--muted);
   font-size:14px;
 }
 
-/* Flying card */
+/* Flying card matches card style */
 .flyingCard{
   position:fixed;
   z-index:10000;
   pointer-events:none;
-  background:var(--card);
-  color:var(--text);
-  padding:14px 18px;
+  background:
+    radial-gradient(120px 80px at 30% 20%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%),
+    radial-gradient(140px 100px at 70% 80%, rgba(0,0,0,.06), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, var(--paper1) 0%, var(--paper2) 50%, var(--paper3) 100%);
+  border:2px solid var(--paperBorder);
+  box-shadow:
+    inset 0 0 0 3px var(--paperInner),
+    inset 0 0 0 6px rgba(200,40,40,.95),
+    0 16px 34px rgba(0,0,0,.60);
+  color:#111;
+  font-family: ui-serif, "Georgia", "Times New Roman", Times, serif;
+  font-weight:900;
+  font-size:36px;
   border-radius:16px;
-  font-size:18px;
-  min-width:56px;
-  box-shadow:0 10px 28px rgba(0,0,0,.55);
+  min-width:74px;
+  min-height:108px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   transform: translate(-50%, -50%);
   will-change: transform, opacity;
 }
 
 @media (max-width:420px){
   input{ min-width:150px; }
-  .piles{ grid-template-columns:repeat(2, minmax(140px, 1fr)); }
+  .pile{ width:86px; height:124px; }
+  .card{ width:70px; height:102px; }
 }
 </style>
 </head>
@@ -381,6 +497,7 @@ window.addEventListener("load", ()=>{
   document.getElementById("name").addEventListener("input", saveInputs);
 });
 
+/* Sounds */
 function beep(freq=440, ms=70){
   try{
     if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -394,6 +511,7 @@ function beep(freq=440, ms=70){
   }catch(e){}
 }
 
+/* Toast */
 let toastTimer=null;
 function toast(text){
   const t=document.getElementById("toast");
@@ -403,56 +521,7 @@ function toast(text){
   toastTimer=setTimeout(()=>t.style.display="none", 1700);
 }
 
-function create(){
-  saveInputs();
-  room=document.getElementById("room").value.trim();
-  if(!room) return alert("Bitte Lobby-Code eingeben");
-  const maxPlayers=Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value||"2")));
-  socket.emit("create", { room, maxPlayers });
-  join();
-}
-
-function join(){
-  saveInputs();
-  room=document.getElementById("room").value.trim();
-  if(!room) return alert("Bitte Lobby-Code eingeben");
-  const name=document.getElementById("name").value.trim();
-  socket.emit("join", { room, name });
-  beep(520,60);
-}
-
-socket.on("errorMsg", (msg)=> alert(msg));
-
-socket.on("state", (s)=>{
-  state=s;
-  myId=socket.id;
-  render();
-});
-socket.on("hand", (hand)=>{
-  myHand=hand||[];
-  renderHand();
-});
-
-function isValid(card, pileName, pileValue){
-  return pileName.startsWith("up")
-    ? (card>pileValue || card===pileValue-10)
-    : (card<pileValue || card===pileValue+10);
-}
-
-function hasAnyLegalMove(){
-  if(!state) return false;
-  for(const c of (myHand||[])){
-    for(const p in state.piles){
-      if(isValid(c, p, state.piles[p])) return true;
-    }
-  }
-  return false;
-}
-
-function minPlaysThisTurn(){
-  return (state && state.deckCount===0) ? 1 : 2;
-}
-
+/* Overlay */
 function showOverlay(html){
   const ov=document.getElementById("overlay");
   ov.innerHTML=`<div class="box">${html}</div>`;
@@ -464,8 +533,65 @@ function hideOverlay(){
   ov.innerHTML="";
 }
 
-let lastEndSound=null;
-let lastPassHint=false;
+/* Vibration */
+let lastWasMyTurn=false;
+function vibrate(pattern=[25]){
+  try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch{}
+}
+
+/* Create/Join */
+function create(){
+  saveInputs();
+  room=document.getElementById("room").value.trim();
+  if(!room) return alert("Bitte Lobby-Code eingeben");
+  const maxPlayers=Math.max(2, Math.min(4, parseInt(document.getElementById("maxPlayers").value||"2")));
+  socket.emit("create", { room, maxPlayers });
+  join();
+}
+function join(){
+  saveInputs();
+  room=document.getElementById("room").value.trim();
+  if(!room) return alert("Bitte Lobby-Code eingeben");
+  const name=document.getElementById("name").value.trim();
+  socket.emit("join", { room, name });
+  beep(520,60);
+}
+
+socket.on("errorMsg", (msg)=> alert(msg));
+socket.on("state", (s)=>{
+  state=s;
+  myId=socket.id;
+  render();
+});
+socket.on("hand", (hand)=>{
+  myHand=hand||[];
+  renderHand();
+});
+
+/* Rules */
+function isValid(card, pileName, pileValue){
+  return pileName.startsWith("up")
+    ? (card>pileValue || card===pileValue-10)
+    : (card<pileValue || card===pileValue+10);
+}
+function hasAnyLegalMove(){
+  if(!state) return false;
+  for(const c of (myHand||[])){
+    for(const p in state.piles){
+      if(isValid(c, p, state.piles[p])) return true;
+    }
+  }
+  return false;
+}
+function minPlaysThisTurn(){
+  return (state && state.deckCount===0) ? 1 : 2;
+}
+
+/* Startpref */
+function sendStartPref(pref){
+  socket.emit("startPref", { room, pref });
+  beep(600,70);
+}
 
 /* Ping chips */
 function setArmedPing(typeOrNull){
@@ -475,10 +601,14 @@ function setArmedPing(typeOrNull){
 }
 ["chipHave","chipDont"].forEach(id=>{
   const el=document.getElementById(id);
+
+  // Desktop drag
   el.addEventListener("dragstart",(e)=>{
     e.dataTransfer.setData("pingType", el.dataset.type);
     try{ e.dataTransfer.effectAllowed="copy"; }catch{}
   });
+
+  // Mobile tap-arming
   el.addEventListener("click", ()=>{
     const t=el.dataset.type;
     setArmedPing(armedPing===t?null:t);
@@ -490,12 +620,6 @@ function sendPilePing(pile, type){
   if(!room) return toast("Erst Lobby beitreten.");
   socket.emit("pilePing", { room, pile, type });
   beep(type==="dont" ? 240 : 860, 70);
-}
-
-/* Startpref senden */
-function sendStartPref(pref){
-  socket.emit("startPref", { room, pref });
-  beep(600,70);
 }
 
 /* Card animation */
@@ -518,17 +642,22 @@ function animateCardToPile(cardValue, pileName){
 
   const dir=pileName.startsWith("up") ? -1 : 1;
   const midX=(startX+endX)/2;
-  const midY=(startY+endY)/2 + dir*80;
+  const midY=(startY+endY)/2 + dir*90;
 
   const anim=fly.animate([
     { transform:`translate(-50%, -50%) scale(1)`, opacity:1, offset:0, left:startX+"px", top:startY+"px" },
     { transform:`translate(-50%, -50%) scale(1.06)`, opacity:1, offset:0.55, left:midX+"px", top:midY+"px" },
-    { transform:`translate(-50%, -50%) scale(0.96)`, opacity:0.92, offset:1, left:endX+"px", top:endY+"px" }
-  ], { duration:420, easing:"cubic-bezier(.2,.9,.2,1)" });
+    { transform:`translate(-50%, -50%) scale(0.98)`, opacity:0.95, offset:1, left:endX+"px", top:endY+"px" }
+  ], { duration:440, easing:"cubic-bezier(.2,.9,.2,1)" });
 
   anim.onfinish=()=>fly.remove();
 }
 
+/* End/Wins */
+let lastEndSound=null;
+let lastPassHint=false;
+
+/* Render */
 function render(){
   if(!state) return;
 
@@ -541,24 +670,33 @@ function render(){
   const played = state.playedThisTurn?.[myId] ?? 0;
   const minPlays = minPlaysThisTurn();
 
+  // Vibration only when turn starts
+  if (isMyTurn && !lastWasMyTurn) {
+    vibrate([20, 40, 20]);
+  }
+  lastWasMyTurn = isMyTurn;
+  if (state.status !== "playing") lastWasMyTurn = false;
+
+  // Turn ring visuals
   const ring=document.getElementById("turnRing");
+  ring.classList.remove("spinning","myTurn","otherTurn");
+
   if(state.status==="waiting"){
     document.getElementById("turnInfo").innerText=`Warte bis Lobby voll ist… (${joined}/${state.maxPlayers})`;
-    ring.classList.remove("spinning");
   } else if(state.status==="choosing_start"){
     document.getElementById("turnInfo").innerText=`Start wählen…`;
-    ring.classList.remove("spinning");
   } else if(state.status==="playing"){
     document.getElementById("turnInfo").innerText = isMyTurn
       ? `DEIN ZUG • gespielt: ${played}/${minPlays} ${state.deckCount===0 ? "(Deck leer)" : ""}`
       : `Jemand anderes ist dran`;
-    ring.classList.toggle("spinning", isMyTurn);
+
+    if (isMyTurn) ring.classList.add("myTurn","spinning");
+    else ring.classList.add("otherTurn");
   } else {
     document.getElementById("turnInfo").innerText="";
-    ring.classList.remove("spinning");
   }
 
-  // EndTurn Button
+  // EndTurn button
   const endBtn=document.getElementById("endTurnBtn");
   const canPass = isMyTurn && !hasAnyLegalMove();
   endBtn.style.display = (isMyTurn && (played>=minPlays || canPass)) ? "inline-block" : "none";
@@ -569,7 +707,7 @@ function render(){
   }
   if(!isMyTurn) lastPassHint=false;
 
-  // Startwahl Overlay
+  // Start choice overlay
   if(state.status==="choosing_start"){
     const myMade = !!state.start?.made?.[myId];
     const madeCount = Object.values(state.start?.made || {}).filter(Boolean).length;
@@ -604,26 +742,48 @@ function render(){
     lastEndSound=null;
   }
 
-  // Piles
+  // Render piles
   const pilesDiv=document.getElementById("piles");
   pilesDiv.innerHTML="";
-  for(const p in state.piles){
-    const val=state.piles[p];
-    const d=document.createElement("div");
-    d.className="pile";
-    d.innerHTML=`<span>${p.startsWith("up") ? "↑ aufsteigend" : "↓ absteigend"}</span><strong>${val}</strong>`;
-    pileEls[p]=d;
 
+  // order like real table: down down up up
+  const order = ["down1","down2","up1","up2"];
+
+  for(const p of order){
+    if(!(p in state.piles)) continue;
+
+    const val = state.piles[p];
+    const d = document.createElement("div");
+    d.className = "pile " + (p.startsWith("up") ? "up" : "down");
+
+    // valid highlight if a card is selected
     if(selectedCard!==null && isValid(selectedCard, p, val)) d.classList.add("valid");
 
-    const ping=state.pilePings?.[p];
+    // arrow
+    const a = document.createElement("div");
+    a.className = "arrow";
+    a.textContent = p.startsWith("up") ? "↑" : "↓";
+    d.appendChild(a);
+
+    // value
+    const v = document.createElement("div");
+    v.textContent = val;
+    d.appendChild(v);
+
+    pileEls[p] = d;
+
+    // ping visuals
+    const ping = state.pilePings?.[p];
     if(ping){
       const badge=document.createElement("div");
-      badge.className="pilePing " + ping.type;
-      badge.textContent = ping.type==="dont" ? "🚫" : "👀";
+      badge.className="pilePing";
+      badge.textContent = (ping.type==="dont") ? "🚫" : "👀";
       d.appendChild(badge);
+
+      if(ping.type==="dont") d.classList.add("blocked");
     }
 
+    // Desktop drop for ping
     d.addEventListener("dragover",(e)=>e.preventDefault());
     d.addEventListener("drop",(e)=>{
       e.preventDefault();
@@ -631,6 +791,7 @@ function render(){
       if(type==="have"||type==="dont") sendPilePing(p,type);
     });
 
+    // Click: if ping armed -> set ping; else try play
     d.onclick=()=>{
       if(armedPing){
         sendPilePing(p, armedPing);
@@ -651,12 +812,14 @@ function renderHand(){
   const handDiv=document.getElementById("hand");
   handDiv.innerHTML="";
   cardEls.clear();
+
   (myHand||[]).forEach((c)=>{
     const el=document.createElement("div");
     el.className="card" + (selectedCard===c ? " selected" : "");
-    el.innerText = c;
-el.dataset.value = c;
+    el.innerText=c;
+    el.dataset.value = c; // corner numbers
     cardEls.set(c, el);
+
     el.onclick=()=>{ selectedCard=c; beep(520,40); render(); };
     handDiv.appendChild(el);
   });
