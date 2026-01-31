@@ -391,6 +391,13 @@ button.secondary{
 const SERVER_URL = "https://the-game-server-h9br.onrender.com";
 const socket = io(SERVER_URL);
 
+setInterval(() => {
+  if (socket.connected) {
+    socket.emit("keepAlive");
+  }
+}, 20000); // alle 20 Sekunden
+
+
 /* token */
 const LS_TOKEN = "thegame_token";
 function getToken(){
