@@ -267,6 +267,10 @@ async function checkWinLose(game) {
 
 /* ------------ socket events ------------ */
 io.on("connection", (socket) => {
+  socket.on("keepAlive", () => {
+  // absichtlich leer
+});
+
   socket.on("create", async ({ room, maxPlayers }) => {
     try {
       if (!room) return;
