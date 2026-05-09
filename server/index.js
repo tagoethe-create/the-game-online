@@ -13,7 +13,6 @@ if (!REDIS_URL) {
   process.exit(1);
 }
 
-// Upstash requires TLS -> rediss://...
 const redis = new Redis(REDIS_URL, {
   maxRetriesPerRequest: 3,
   enableReadyCheck: false
@@ -26,19 +25,21 @@ const app = express();
 app.use(cors({ origin: "*" }));
 
 app.get("/", (_req, res) => res.send("OK"));
+
+// ✅ Health endpoint – wird vom Cron-Job gepingt
 app.get("/health", async (_req, res) => {
   try {
     await redis.ping();
-    res.json({ ok: true });
+    res.json({ ok: true, ts: Date.now() });
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
 });
+
 app.get("/room/:code", async (req, res) => {
   try {
     const room = (req.params.code || "").trim();
     if (!room) return res.json({ room: "", exists: false });
-
     const raw = await redis.get(roomKey(room));
     res.json({ room, exists: !!raw });
   } catch (e) {
@@ -48,17 +49,23 @@ app.get("/room/:code", async (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  // ✅ Ping-Timeout erhöht damit Verbindungen stabiler bleiben
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 const roomKey = (room) => `thegame:room:${room}`;
 const statsKey = (token) => `thegame:stats:${token}`;
 
+// In-Memory Index: socketId -> { room, token }
 const socketIndex = new Map();
 
 const HAND_SIZE = 6;
 const MIN_CARD = 2;
 const MAX_CARD = 99;
+
+/* ─── Redis Helpers ─── */
 
 async function loadRoom(room) {
   const raw = await redis.get(roomKey(room));
@@ -84,6 +91,8 @@ async function getStats(token) {
 async function setStats(token, stats) {
   await redis.set(statsKey(token), JSON.stringify(stats), "EX", ROOM_TTL_SECONDS * 7);
 }
+
+/* ─── Game Logic ─── */
 
 function newShuffledDeck() {
   const deck = [];
@@ -159,6 +168,19 @@ async function emitState(room, game) {
 async function emitHandAndStats(socket, game, token) {
   socket.emit("hand", game.players?.[token]?.hand || []);
   socket.emit("stats", await getStats(token));
+}
+
+// ✅ Sendet Hand + Stats an alle Spieler deren Socket noch aktiv ist
+async function broadcastHandsAndStats(game) {
+  for (const [t, pl] of Object.entries(game.players || {})) {
+    if (pl.socketId) {
+      const s = io.sockets.sockets.get(pl.socketId);
+      if (s) {
+        s.emit("hand", pl.hand || []);
+        s.emit("stats", await getStats(t));
+      }
+    }
+  }
 }
 
 async function createRoom(room, maxPlayers) {
@@ -265,11 +287,12 @@ async function checkWinLose(game) {
   return game;
 }
 
-/* ------------ socket events ------------ */
+/* ─── Socket Events ─── */
+
 io.on("connection", (socket) => {
-  socket.on("keepAlive", () => {
-  // absichtlich leer
-});
+
+  // ✅ keepAlive: hält die Socket-Verbindung aktiv (kein Sleep durch Inaktivität)
+  socket.on("keepAlive", () => { /* absichtlich leer */ });
 
   socket.on("create", async ({ room, maxPlayers }) => {
     try {
@@ -277,7 +300,7 @@ io.on("connection", (socket) => {
       maxPlayers = Math.max(2, Math.min(4, parseInt(maxPlayers || "2", 10)));
       const game = await createRoom(room.trim(), maxPlayers);
       await emitState(game.room, game);
-    } catch (e) {
+    } catch {
       socket.emit("errorMsg", "Serverfehler beim Erstellen der Lobby.");
     }
   });
@@ -294,9 +317,12 @@ io.on("connection", (socket) => {
 
       const tokens = Object.keys(game.players || {});
       const isKnown = !!game.players?.[token];
-      if (!isKnown && tokens.length >= game.maxPlayers) return socket.emit("errorMsg", "Lobby ist voll.");
+      if (!isKnown && tokens.length >= game.maxPlayers) {
+        return socket.emit("errorMsg", "Lobby ist voll.");
+      }
 
       if (!game.players) game.players = {};
+
       if (!game.players[token]) {
         game.players[token] = { name: name || "", hand: [], connected: true, socketId: socket.id };
       } else {
@@ -308,12 +334,23 @@ io.on("connection", (socket) => {
       socket.join(room);
       socketIndex.set(socket.id, { room, token });
 
+      // ✅ FIX: Nach Server-Neustart sind alte socketIds ungültig.
+      // Alle anderen Spieler deren Socket nicht mehr existiert → als disconnected markieren.
+      for (const [t, pl] of Object.entries(game.players)) {
+        if (t === token) continue;
+        const stillAlive = pl.socketId && io.sockets.sockets.has(pl.socketId);
+        if (!stillAlive) {
+          game.players[t].connected = false;
+          game.players[t].socketId = null;
+        }
+      }
+
       game = await startChoosingIfReady(game);
       await saveRoom(room, game);
 
       await emitState(room, game);
       await emitHandAndStats(socket, game, token);
-    } catch (e) {
+    } catch {
       socket.emit("errorMsg", "Serverfehler beim Beitreten.");
     }
   });
@@ -336,14 +373,7 @@ io.on("connection", (socket) => {
       await saveRoom(room, game);
 
       await emitState(room, game);
-      socket.emit("stats", await getStats(token));
-
-      for (const [t, p] of Object.entries(game.players || {})) {
-        if (p.socketId) {
-          const s = io.sockets.sockets.get(p.socketId);
-          if (s) s.emit("hand", p.hand || []);
-        }
-      }
+      await broadcastHandsAndStats(game);
     } catch {
       socket.emit("errorMsg", "Serverfehler bei Startwahl.");
     }
@@ -353,11 +383,11 @@ io.on("connection", (socket) => {
     try {
       room = (room || "").trim();
       if (!room) return;
+
       let game = await loadRoom(room);
       if (!game) return socket.emit("errorMsg", "Lobby existiert nicht (erst erstellen).");
-
-      if (!["up1","up2","down1","down2"].includes(pile)) return;
-      if (!["have","dont"].includes(type)) return;
+      if (!["up1", "up2", "down1", "down2"].includes(pile)) return;
+      if (!["have", "dont"].includes(type)) return;
 
       game.pilePings = game.pilePings || {};
       game.pilePings[pile] = { type, ts: Date.now() };
@@ -391,24 +421,16 @@ io.on("connection", (socket) => {
 
       game.piles[pile] = card;
       p.hand = p.hand.filter((x) => x !== card);
-
       game.playedThisTurn = game.playedThisTurn || {};
       game.playedThisTurn[token] = (game.playedThisTurn[token] || 0) + 1;
 
       await saveRoom(room, game);
-
       await emitState(room, game);
       socket.emit("hand", p.hand || []);
 
       game = await checkWinLose(game);
       await emitState(room, game);
-
-      for (const [t, pl] of Object.entries(game.players || {})) {
-        if (pl.socketId) {
-          const s = io.sockets.sockets.get(pl.socketId);
-          if (s) s.emit("stats", await getStats(t));
-        }
-      }
+      await broadcastHandsAndStats(game);
     } catch {
       socket.emit("errorMsg", "Serverfehler beim Spielen.");
     }
@@ -433,9 +455,10 @@ io.on("connection", (socket) => {
       const canMove = anyLegalMoveForToken(game, token);
 
       if (played < minPlays && canMove) {
-        return socket.emit("errorMsg", `Du musst mindestens ${minPlays} Karte${minPlays>1?"n":""} spielen (wenn möglich).`);
+        return socket.emit("errorMsg", `Du musst mindestens ${minPlays} Karte${minPlays > 1 ? "n" : ""} spielen (wenn möglich).`);
       }
 
+      // Karten nachziehen
       while (p.hand.length < HAND_SIZE && game.deck.length > 0) {
         p.hand.push(game.deck.pop());
       }
@@ -444,24 +467,11 @@ io.on("connection", (socket) => {
       game.turnToken = nextConnectedToken(game, token);
 
       await saveRoom(room, game);
-
       await emitState(room, game);
-      for (const [t, pl] of Object.entries(game.players || {})) {
-        if (pl.socketId) {
-          const s = io.sockets.sockets.get(pl.socketId);
-          if (s) s.emit("hand", pl.hand || []);
-        }
-      }
+      await broadcastHandsAndStats(game);
 
       game = await checkWinLose(game);
       await emitState(room, game);
-
-      for (const [t, pl] of Object.entries(game.players || {})) {
-        if (pl.socketId) {
-          const s = io.sockets.sockets.get(pl.socketId);
-          if (s) s.emit("stats", await getStats(t));
-        }
-      }
     } catch {
       socket.emit("errorMsg", "Serverfehler beim Zug beenden.");
     }
@@ -471,6 +481,7 @@ io.on("connection", (socket) => {
     try {
       room = (room || "").trim();
       if (!room) return;
+
       let game = await loadRoom(room);
       if (!game) return socket.emit("errorMsg", "Lobby existiert nicht (erst erstellen).");
 
@@ -481,22 +492,12 @@ io.on("connection", (socket) => {
       game.playedThisTurn = {};
       game.pilePings = {};
       game.start = null;
-
       for (const t of Object.keys(game.players || {})) game.players[t].hand = [];
 
       game = await startChoosingIfReady(game);
       await saveRoom(room, game);
       await emitState(room, game);
-
-      for (const [t, pl] of Object.entries(game.players || {})) {
-        if (pl.socketId) {
-          const s = io.sockets.sockets.get(pl.socketId);
-          if (s) {
-            s.emit("hand", pl.hand || []);
-            s.emit("stats", await getStats(t));
-          }
-        }
-      }
+      await broadcastHandsAndStats(game);
     } catch {
       socket.emit("errorMsg", "Serverfehler beim Rematch.");
     }
@@ -521,4 +522,5 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => console.log(`✅ Server listening on ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server läuft auf Port ${PORT}`));
+
